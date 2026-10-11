@@ -32,8 +32,13 @@ test('bump handles the three keywords and an explicit version above the current 
   assert.equal(bump('0.1.9', 'minor'), '0.2.0')
   assert.equal(bump('1.4.2', 'major'), '2.0.0')
   assert.equal(bump('0.1.0', '0.3.0'), '0.3.0')
-  assert.throws(() => bump('0.2.0', '0.1.5'), /not above/)
+  assert.throws(() => bump('0.2.0', '0.1.5'), /below the current/)
   assert.throws(() => bump('0.1.0', 'huge'), /not major, minor, patch/)
+})
+
+test('bump releases the current version as is only when it was never released', () => {
+  assert.throws(() => bump('0.1.0', '0.1.0'), /already released/)
+  assert.equal(bump('0.1.0', '0.1.0', { allowCurrent: true }), '0.1.0')
 })
 
 test('setVersion rewrites only the version fields and keeps the rest of the file byte for byte', () => {

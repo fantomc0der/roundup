@@ -13,7 +13,9 @@ import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { CHANGELOG, LOCK, PACKAGE, PLUGIN, compareVersions, hasEntries, root, unreleasedSection } from './release.mjs'
+import { CHANGELOG, LOCK, PACKAGE, PLUGIN, compareVersions, hasEntries, releasedVersions, root, unreleasedSection } from './release.mjs'
+
+export { releasedVersions }
 
 // Paths whose change ships to a user of the plugin, so a pull request touching them owes a changelog entry.
 const SHIPPED = [/^(src|bin|skills|agents)\//, /^hooks\/(?!.*\.test\.tsx?$)/, /^\.claude-plugin\/plugin\.json$/, /^types\/index\.d\.ts$/]
@@ -28,13 +30,6 @@ export function checkManifests({ plugin, pkg, lock }) {
   if (lock && lock.version !== version) errors.push(`${LOCK} is ${lock.version} but ${PLUGIN} is ${version}`)
   if (lock && lock.packages?.['']?.version !== version) errors.push(`${LOCK} root package is ${lock.packages?.['']?.version} but ${PLUGIN} is ${version}`)
   return errors
-}
-
-export function releasedVersions(text) {
-  return text
-    .split('\n')
-    .map(l => /^## \[(\d+\.\d+\.\d+)\]/.exec(l)?.[1])
-    .filter(Boolean)
 }
 
 export function checkChangelog(text, version) {

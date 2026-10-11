@@ -25,7 +25,17 @@ export function compareVersions(a, b) {
   return 0
 }
 
-export function bump(current, spec) {
+// The versions that have a section in the changelog, newest first.
+export function releasedVersions(text) {
+  return text
+    .split('\n')
+    .map(l => /^## \[(\d+\.\d+\.\d+)\]/.exec(l)?.[1])
+    .filter(Boolean)
+}
+
+// `allowCurrent` lets the manifests' own version be released as is: the first release,
+// where the manifests already say 0.1.0 and no section or tag exists for it yet.
+export function bump(current, spec, { allowCurrent = false } = {}) {
   if (!VERSION_RE.test(current)) throw new Error(`current version '${current}' is not x.y.z`)
   const [major, minor, patch] = current.split('.').map(Number)
   switch (spec) {
@@ -35,10 +45,13 @@ export function bump(current, spec) {
       return `${major}.${minor + 1}.0`
     case 'patch':
       return `${major}.${minor}.${patch + 1}`
-    default:
+    default: {
       if (!VERSION_RE.test(spec)) throw new Error(`'${spec}' is not major, minor, patch, or x.y.z`)
-      if (compareVersions(spec, current) <= 0) throw new Error(`${spec} is not above the current version ${current}`)
+      const delta = compareVersions(spec, current)
+      if (delta < 0) throw new Error(`${spec} is below the current version ${current}`)
+      if (delta === 0 && !allowCurrent) throw new Error(`${spec} is already released; pick a version above it`)
       return spec
+    }
   }
 }
 
@@ -121,7 +134,8 @@ export function main(argv) {
   const current = plugin.version
   const repo = String(plugin.repository ?? '').replace(/\.git$/, '').replace(/\/$/, '')
   if (!repo) throw new Error(`${PLUGIN} has no repository URL for the changelog links`)
-  const next = bump(current, spec)
+  const changelog = read(CHANGELOG)
+  const next = bump(current, spec, { allowCurrent: !releasedVersions(changelog).includes(current) })
   if ((flags.has('--commit') || flags.has('--tag')) && git(['status', '--porcelain']).trim()) {
     throw new Error('the working tree must be clean before --commit or --tag')
   }
@@ -131,7 +145,7 @@ export function main(argv) {
     [PLUGIN, setVersion(read(PLUGIN), current, next)],
     [PACKAGE, setVersion(read(PACKAGE), current, next)],
     [LOCK, setVersion(read(LOCK), current, next, 2)],
-    [CHANGELOG, cutChangelog(read(CHANGELOG), next, date, repo)],
+    [CHANGELOG, cutChangelog(changelog, next, date, repo)],
   ]
   const lock = JSON.parse(changes[2][1])
   if (lock.version !== next || lock.packages?.['']?.version !== next) throw new Error(`${LOCK} did not take the new version cleanly`)
