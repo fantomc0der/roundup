@@ -2,31 +2,54 @@
   "name": "roundup",
   "version": "0.1.0",
   "description": "Round up a team of Claude Code sessions in herdr panes, let them argue it out, then build.",
-  "author": { "name": "fantomc0der", "url": "https://github.com/fantomc0der" },
+  "author": {
+    "name": "fantomc0der",
+    "url": "https://github.com/fantomc0der"
+  },
   "homepage": "https://github.com/fantomc0der/roundup",
   "repository": "https://github.com/fantomc0der/roundup",
   "license": "MIT",
-  "keywords": ["herdr", "multi-agent", "agent-teams", "orchestration", "cross-session-messaging"],
+  "keywords": [
+    "herdr",
+    "multi-agent",
+    "agent-teams",
+    "orchestration",
+    "cross-session-messaging"
+  ],
+  "types": "./types/index.d.ts",
   "userConfig": {
     "default_layout": {
       "type": "string",
       "title": "Default team layout",
       "description": "Where teammates appear when the request does not say. auto picks by team size and whether the lead is inside herdr.",
-      "options": ["auto", "split", "tab", "workspace"],
+      "options": [
+        "auto",
+        "split",
+        "tab",
+        "workspace"
+      ],
       "default": "auto"
     },
     "default_retention": {
       "type": "string",
       "title": "Default retention",
       "description": "What happens to advisors after synthesis when the request does not say.",
-      "options": ["auto", "dismiss", "keep-for-review"],
+      "options": [
+        "auto",
+        "dismiss",
+        "keep-for-review"
+      ],
       "default": "auto"
     },
     "advisor_bash": {
       "type": "string",
       "title": "Bash for advisors and reviewers",
       "description": "readonly-heuristic denies Bash commands that look like writes; deny blocks Bash entirely; allow leaves Bash alone.",
-      "options": ["readonly-heuristic", "deny", "allow"],
+      "options": [
+        "readonly-heuristic",
+        "deny",
+        "allow"
+      ],
       "default": "readonly-heuristic"
     }
   }

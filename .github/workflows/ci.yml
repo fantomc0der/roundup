@@ -41,6 +41,8 @@ jobs:
           claude plugin validate .claude-plugin/plugin.json --strict
           claude plugin validate skills --strict
           claude plugin validate agents --strict
+      - name: Type-check the mod
+        run: npm run typecheck
       - name: Unit tests
         run: npm test
       - name: Unit tests under Git Bash
