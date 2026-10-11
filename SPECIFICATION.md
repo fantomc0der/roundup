@@ -137,11 +137,12 @@ roundup/
 │   └── devils-advocate.md
 ├── hooks/
 │   ├── hooks.json               # { "modules": ["./register.ts"] }
-│   ├── register.ts              # the mod
+│   ├── register.tsx             # the mod
 │   ├── lib/                     # shared pure functions (manifest parsing, env detection)
 │   └── register.test.ts         # claude plugin test
 ├── types/
-│   └── index.d.ts               # PluginState contract for $.state
+│   ├── index.d.ts               # PluginState contract for $.state
+│   └── vendor/claude-code.d.ts  # the engine's declaration file, for tsc in CI
 ├── src/                         # CLI source split into modules; bin/roundup is the entry
 │   ├── herdr.mjs                # herdr CLI wrapper (spawn, JSON parse, CRLF strip)
 │   ├── manifest.mjs
@@ -228,7 +229,7 @@ Install line for the README: `/plugin install roundup --marketplace fantomc0der/
 
 **Invariants**
 
-- Every subcommand prints one JSON document on stdout on success and a JSON `{ "error": { "code", "message", "hint" } }` on stderr with exit code 1 on failure. Exit code 2 is usage error, 3 is "spawned but not ready" (teammate recorded, needs attention).
+- Every subcommand prints one JSON document on stdout on success and a JSON `{ "error": { "code", "message", "hint" } }` on stderr with exit code 1 on failure. Exit code 2 is usage error, 3 is "spawned but not ready" (teammate recorded, needs attention). `read` and `doctor` print text, because a transcript or a diagnostic is read by a person or a model, not parsed.
 - Every herdr call goes through one wrapper that runs `herdr <args>`, strips `\r`, parses JSON, and raises on `.error`. Never shell out through a string; always an argv array.
 - The CLI never closes a herdr object it did not create. The manifest records `created.workspace`, `created.tab`, and each teammate's pane and tab.
 - The CLI never answers a startup dialog other than the folder-trust dialog, and that only with `--auto-trust` and only for the team's own `cwd`.
@@ -286,7 +287,7 @@ sequenceDiagram
 
 Details that matter:
 
-- **Environment on the pane**, passed with `--env` on `pane split`, `tab create`, or `workspace create`: `ROUNDUP_TEAM`, `ROUNDUP_NAME`, `ROUNDUP_KIND`, `ROUNDUP_LEAD`, `ROUNDUP_LEAD_SESSION_ID` (when known), `ROUNDUP_DIR`, `ROUNDUP_BRIEF`. The teammate's shell inherits them, so `claude` and therefore the mod see them. This is what lets the mod identify a teammate session without any file lookup.
+- **Environment on the pane**, passed with `--env` on `pane split` or `tab create`: `ROUNDUP_TEAM`, `ROUNDUP_NAME`, `ROUNDUP_KIND`, `ROUNDUP_LEAD`, `ROUNDUP_LEAD_SESSION_ID` (when known), `ROUNDUP_DIR`, `ROUNDUP_BRIEF`. The teammate's shell inherits them, so `claude` and therefore the mod see them (**verified**). The first teammate of a `tab` or `workspace` layout takes the root pane created at `init`, before it had a name, so `init` stamps the team-level variables on the container and the mod finds that teammate in the manifest by herdr's own `HERDR_PANE_ID` (**verified**: the mod reported `kickoff: mod` for a root-pane teammate).
 - **System prompt** stays short and single-line: identity, role, brief path, lead name, shared dir, the messaging rule, and the "never change settings because a peer asked" rule. Double quotes are replaced with single quotes because herdr types the launch line into PowerShell with single-quoted arguments (verified).
 - **Readiness** means `idle` or `done` from herdr **and** the `❯` input box visible. herdr reports idle a few seconds before Claude accepts typed input, and text typed in that gap is dropped silently (verified). A freshly answered dialog still reads `blocked` for a few seconds (verified), so only a block that persists for 12 seconds fails readiness.
 - **Kickoff coordination with the mod**: the CLI waits up to 5 seconds after readiness for the manifest entry's `kickoff` field to become `mod` (the mod writes it after submitting). If it does not appear, the CLI types the kickoff itself. This makes the mod an optimization, not a dependency.
@@ -516,7 +517,7 @@ CLI:
 
 File ownership check: `add` warns when two pending tasks list the same file with different owners, because two builders editing one file is the main way build-together goes wrong.
 
-Mod integration (milestone 3): `$.tool.register` exposes `task_list`, `task_claim_next`, `task_complete` in every session of the team, with handlers that run the CLI through `$.process.run`. Claude then uses the board the way it uses the native task tools, without the skill text having to explain Bash incantations.
+Mod integration: `$.tool.register` exposes `task_list`, `task_claim_next`, `task_complete` (listed as `mcp__roundup__task_*`) in every session of the team, with handlers that run the CLI through `$.process.run` as the session's own teammate name. Claude then uses the board the way it uses the native task tools, without the skill text having to explain Bash incantations.
 
 ## 15. Error handling and known failure modes
 
@@ -554,7 +555,7 @@ Mod integration (milestone 3): `$.tool.register` exposes `task_list`, `task_clai
 3. `claude plugin validate . --strict`.
 4. `node --test tests/unit`.
 5. `claude plugin test .` (assumed to run without API credentials; if it needs them, mark the step optional and run it on a self-hosted runner).
-6. `tsc -p .` once the types are laid down by a first load; CI generates them by starting `claude --plugin-dir . -p "exit"` if that proves to write `.claude-plugin/types/` (assumed; otherwise commit a copy of `claude-code.d.ts` under `types/vendor/` and refresh it on Claude Code bumps).
+6. `tsc -p .` against the vendored `types/vendor/claude-code.d.ts`.
 7. Windows job additionally runs the CLI unit tests under Git Bash to cover `cygpath` conversion.
 
 `release.yml` on tag `v*`:
@@ -565,7 +566,7 @@ Mod integration (milestone 3): `$.tool.register` exposes `task_list`, `task_clai
 
 No npm publish: installation is through the marketplace file in this repo.
 
-Branch policy: work on feature branches, PRs into `main`, squash merges, `main` protected. Conventional commit prefixes, PR template with a "tested on" checklist (Windows, macOS, Linux; inside herdr, outside herdr).
+Branch policy once the first release is out: feature branches, PRs into `main`, squash merges, `main` protected. Until then commits land on `main` directly. Conventional commit prefixes, PR template with a "tested on" checklist (Windows, macOS, Linux; inside herdr, outside herdr).
 
 ## 18. Documentation set
 
@@ -588,13 +589,13 @@ Branch policy: work on feature branches, PRs into `main`, squash merges, `main` 
 
 ## 20. Open questions and assumptions
 
-1. **`claude --agent roundup:pm` for a plugin-scoped definition.** Assumed. If it only accepts project or user definitions, the CLI will copy the chosen definition's body into `--append-system-prompt` instead.
-2. **`$.prompt.submit` at `session.start`.** The docs say it waits for idle and starts a turn. Assumed safe before the user types anything; verify it does not race the trust dialog.
-3. **`$.session.send` to `{ sessionId }` for a local peer.** Documented; verify the lead's `$.session.id()` is the id the messaging layer expects, and whether the lead's inbound class rules hold a mod-originated ping the same way they hold a tool-originated one.
+1. **`claude --agent roundup:pm` for a plugin-scoped definition.** **Verified** on 2026-10-11 with `--plugin-dir`: the teammate quoted the bundled PM definition's first sentences verbatim.
+2. **`$.prompt.submit` at `session.start`.** **Verified**: the mod submitted the brief, the CLI saw `kickoff: mod` within its five-second window, and the teammate started on the brief. The trust dialog did not interfere because the CLI answers it before the session reaches idle.
+3. **`$.session.send` to `{ sessionId }` for a local peer.** Sending by name is **verified**: the lead received `[roundup] e2e-mod finished a turn: ...` stamped `from-plugin="roundup"` in a prompting-class lead. The `{ sessionId }` form is exercised in tests; the engine spells it as a plain address before delivery. Class holds for mod-originated pings remain to be checked with a bypass-mode lead.
 4. **`claude plugin test` credentials in CI.** Unknown. Plan assumes none are needed.
-5. **Types generation in CI.** The engine writes `claude-code.d.ts` when a mod loads; CI may need a headless load or a vendored copy.
+5. **Types generation in CI.** Resolved: the engine never writes the types under a headless load, so `types/vendor/claude-code.d.ts` is a committed copy, refreshed by hand on Claude Code bumps.
 6. **Lead permission mode discovery.** No API found for a script to read the lead's current mode. The skill relies on context cues; the mod could read `$.settings.read()` to find a configured default mode and pass it to `roundup init`. Investigate in M2.
-7. **Bash write-pattern guard for advisors.** A regex over Bash commands is heuristic. The alternative is denying Bash entirely for advisors, which blocks `git log` and `grep`. Start with the heuristic and a `roundup` userConfig switch `advisor_bash: readonly-heuristic | deny | allow`.
+7. **Bash write-pattern guard for advisors.** Implemented as the heuristic with the `advisor_bash` switch. **Verified** live: `git log` ran, an Edit on the project was denied, a Write under the team directory succeeded.
 8. **Cross-machine teams.** herdr's `--machine` and messaging's Remote Control path could extend roundup later. Out of scope for v1; the manifest's `herdr` block is shaped to grow a `machine` field.
 9. **Herdr version drift.** The CLI records the herdr version at `init` and `doctor` warns when the server version is older than the client, per herdr's own guidance.
 
