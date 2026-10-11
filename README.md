@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/banner.png" alt="roundup: lassoed code agents" width="100%"></p>
+
 # roundup
 
 Round up a team of Claude Code sessions in [herdr](https://herdr.dev) panes, let them argue it out, then build.
