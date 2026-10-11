@@ -35,7 +35,7 @@ export type Verdict = { decision: 'deny'; reason: string }
 export function roleVerdict(me: Identity | null, tool: string, input: unknown, advisorBash: AdvisorBash): Verdict | undefined {
   if (!me || me.kind === 'builder') return undefined
   const args = (input ?? {}) as Record<string, unknown>
-  const who = `${me.name} is a ${me.kind} on team ${me.team}`
+  const who = `${me.name} is ${me.kind === "advisor" ? "an" : "a"} ${me.kind} on team ${me.team}`
   if (WRITE_TOOLS.has(tool)) {
     const path = String(args.file_path ?? args.notebook_path ?? '')
     if (path && isUnder(path, me.dir)) return undefined

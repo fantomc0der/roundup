@@ -1,4 +1,5 @@
 import { CliError, usage } from './errors.mjs'
+import { parseArgs } from './args.mjs'
 import * as herdr from './herdr.mjs'
 import * as manifest from './manifest.mjs'
 import * as team from './team.mjs'
@@ -23,41 +24,6 @@ const HELP = `roundup: a team of Claude Code sessions in herdr panes
   roundup doctor
 
 Every command prints JSON on stdout, except read and doctor, which print text. Errors are JSON on stderr; exit 1 failed, 2 usage, 3 teammate spawned but not ready.`
-
-// Minimal argv parser: --flag value, --flag=value, boolean flags, repeated flags, and
-// everything after -- kept verbatim for claude.
-export function parseArgs(argv, { booleans = [], repeated = [] } = {}) {
-  const positionals = []
-  const options = {}
-  let extra = []
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i]
-    if (a === '--') {
-      extra = argv.slice(i + 1)
-      break
-    }
-    if (a.startsWith('--')) {
-      let [key, value] = a.slice(2).split(/=(.*)/s)
-      if (key.startsWith('no-') && booleans.includes(key.slice(3))) {
-        options[key.slice(3)] = false
-        continue
-      }
-      if (booleans.includes(key)) {
-        options[key] = value === undefined ? true : value !== 'false'
-        continue
-      }
-      if (value === undefined) {
-        if (i + 1 >= argv.length) throw usage(`--${key} needs a value`)
-        value = argv[++i]
-      }
-      if (repeated.includes(key)) (options[key] ??= []).push(value)
-      else options[key] = value
-    } else {
-      positionals.push(a)
-    }
-  }
-  return { positionals, options, extra }
-}
 
 const camel = s => s.replace(/-([a-z])/g, (_, c) => c.toUpperCase())
 
