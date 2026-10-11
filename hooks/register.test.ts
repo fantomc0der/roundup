@@ -222,17 +222,17 @@ describe('teammate', () => {
 })
 
 describe('lead', () => {
-  test('registers /roundup and stays inert without a team', async ($, on) => {
+  test('registers /corral and stays inert without a team', async ($, on) => {
     mock.env(on, {})
     mock.clock(on)
     const w = world(on, { manifest: undefined })
     await start($)
-    expect(w.registered).toEqual(['roundup'])
+    expect(w.registered).toEqual(['corral'])
     expect(w.submitted).toHaveLength(0)
     expect((await $.tool.check({ tool: 'Edit', input: { file_path: 'C:\\proj\\a.ts' } })).decision).toBe('allow')
-    const help = await $.command.run({ command: 'roundup', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
-    expect(help.text).toContain('/roundup status')
-    const none = await $.command.run({ command: 'roundup', args: 'status', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+    const help = await $.command.run({ command: 'corral', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+    expect(help.text).toContain('/corral status')
+    const none = await $.command.run({ command: 'corral', args: 'status', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
     expect(none.text).toContain('no active team')
   })
 
@@ -248,7 +248,7 @@ describe('lead', () => {
       }),
     })
     await start($)
-    const out = await $.command.run({ command: 'roundup', args: 'init modal --lead lead-1 --size 2', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+    const out = await $.command.run({ command: 'corral', args: 'init modal --lead lead-1 --size 2', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
     expect(out.text).toContain('team modal ready')
     await clock.settle()
     const init = w.ran.find(a => a.includes('init'))!

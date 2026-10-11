@@ -40,7 +40,7 @@ Three pieces ship in one plugin:
 | :- | :- | :- |
 | Skill | `skills/roundup/` | The orchestration pattern: frame the problem, spawn, run a structured discussion, synthesize, decide what happens to the team, implement, review, close. |
 | CLI | `bin/roundup` | The deterministic part: herdr panes and tabs, session startup, readiness detection, kickoff, manifest bookkeeping, teardown, task board. On the Bash tool's PATH while the plugin is enabled. |
-| Mod | `hooks/register.tsx` | Hooks inside the sessions: the brief submitted with your authority, role guards on tool calls, turn-complete pings to the lead, task tools, and a `/roundup` command and pane for the lead. Inert outside a team. |
+| Mod | `hooks/register.tsx` | Hooks inside the sessions: the brief submitted with your authority, role guards on tool calls, turn-complete pings to the lead, task tools, and a `/corral` command and pane for the lead. Inert outside a team. |
 
 Two channels, never confused: herdr for lifecycle (create, read, wait, close), cross-session messaging for content (briefs, positions, critiques, decisions). `docs/architecture.md` has the diagrams.
 
@@ -56,12 +56,12 @@ The lead reads the code, writes a problem statement, briefs each teammate, runs 
 
 | Command | Does |
 | :- | :- |
-| `/roundup status` | Live state of the active team |
-| `/roundup pane` | A pane with every teammate's state, last message, and focus and release buttons |
-| `/roundup init <team> --lead <name> ...` | Start a team with this session recorded as the lead |
-| `/roundup use <team>` | Follow a team that was started from Bash |
-| `/roundup task ...` | The task board |
-| `/roundup close` | Release everyone and close what the team created |
+| `/corral status` | Live state of the active team |
+| `/corral pane` | A pane with every teammate's state, last message, and focus and release buttons |
+| `/corral init <team> --lead <name> ...` | Start a team with this session recorded as the lead |
+| `/corral use <team>` | Follow a team that was started from Bash |
+| `/corral task ...` | The task board |
+| `/corral close` | Release everyone and close what the team created |
 
 The skill drives the `roundup` CLI directly for spawning: `roundup preflight`, `init`, `spawn`, `status`, `read`, `wait`, `prompt`, `keys`, `release`, `close`, `task`, `list`, `dir`, and `doctor`. Run `roundup help` for the syntax.
 

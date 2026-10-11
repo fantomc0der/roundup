@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { calls, sandbox } from './helpers.mjs'
+import { unmangle } from '../../src/cli.mjs'
 
 test('help and usage errors', () => {
   const box = sandbox()
@@ -275,4 +276,15 @@ test('list, dir, relead, keys, wait, and prompt', () => {
   assert.equal(box.run('wait', 'modal', 'modal-pm', '--until', 'working', '--timeout', '100').json.state, 'working')
   assert.equal(box.run('prompt', 'modal', 'modal-pm', 'Send me your position').json.state, 'working')
   assert.equal(box.run('read', 'modal', 'modal-pm', '--visible').stdout.includes('Send me your position'), true)
+})
+
+test('unmangle undoes the Git Bash path rewrite of a leading slash on Windows', () => {
+  const env = { EXEPATH: 'C:\\Program Files\\Git\\bin' }
+  assert.equal(unmangle('C:/Program Files/Git/exit', env, 'win32'), '/exit')
+  assert.equal(unmangle('C:/Program Files/Git/roundup help', env, 'win32'), '/roundup help')
+  assert.equal(unmangle('C:/Program Files/Git/bin/x', env, 'win32'), '/x')
+  assert.equal(unmangle('plain text', env, 'win32'), 'plain text')
+  assert.equal(unmangle('C:/Program Files/Other/x', env, 'win32'), 'C:/Program Files/Other/x')
+  assert.equal(unmangle('C:/Program Files/Git/exit', env, 'linux'), 'C:/Program Files/Git/exit')
+  assert.equal(unmangle('C:/Program Files/Git/exit', {}, 'win32'), 'C:/Program Files/Git/exit')
 })

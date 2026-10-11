@@ -25,6 +25,18 @@ const HELP = `roundup: a team of Claude Code sessions in herdr panes
 
 Every command prints JSON on stdout, except read and doctor, which print text. Errors are JSON on stderr; exit 1 failed, 2 usage, 3 teammate spawned but not ready.`
 
+// Git Bash (MSYS) rewrites an argument that starts with a slash into a Windows path
+// before a native process sees it, so a typed "/exit" arrives as "C:/Program Files/Git/exit".
+// Undo that for prompt text. EXEPATH is Git for Windows' install root or one of its bin
+// folders, so the root is tried with those trailing segments stripped.
+export function unmangle(text, env = process.env, platform = process.platform) {
+  if (platform !== 'win32' || !env.EXEPATH) return text
+  const base = env.EXEPATH.replace(/\\/g, '/').replace(/\/+$/, '')
+  const roots = [base, base.replace(/\/(usr\/bin|mingw64\/bin|bin|cmd)$/i, '')]
+  for (const root of roots) if (root && text.toLowerCase().startsWith(root.toLowerCase() + '/')) return text.slice(root.length)
+  return text
+}
+
 const camel = s => s.replace(/-([a-z])/g, (_, c) => c.toUpperCase())
 
 const need = (positionals, n, what) => {
@@ -85,7 +97,7 @@ async function dispatch(argv) {
     case 'prompt': {
       const [slug, name, text] = need(rest, 3, '<team> <name> "text"')
       manifest.load(slug)
-      const state = await typedPrompt(name, text)
+      const state = await typedPrompt(name, unmangle(text))
       return { json: { name, state }, exitCode: state === 'stalled' ? 1 : 0 }
     }
     case 'keys': {

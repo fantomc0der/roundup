@@ -9,18 +9,19 @@ import type { AdvisorBash } from './lib/guard'
 import { firstLine, fromName, tokenize } from './lib/text'
 
 const PANE = 'roundup'
+const COMMAND = 'corral'
 const PING_INTERVAL_MS = 20_000
 const POLL_INTERVAL_MS = 5_000
 
 const teamView = atom({ plugin: 'roundup', key: 'team' } as const, null as TeamView | null)
 
 const HELP = [
-  '/roundup status            live state of the active team',
-  '/roundup pane              open the team pane',
-  '/roundup use <team>        follow a team started from Bash',
-  '/roundup init <team> --lead <name> [--size N] [--layout L] [--retention R] [--cwd DIR]',
-  '/roundup task <add|claim|next|complete|list|block|unblock> ...',
-  '/roundup close             release every teammate and close the container',
+  '/corral status            live state of the active team',
+  '/corral pane              open the team pane',
+  '/corral use <team>        follow a team started from Bash',
+  '/corral init <team> --lead <name> [--size N] [--layout L] [--retention R] [--cwd DIR]',
+  '/corral task <add|claim|next|complete|list|block|unblock> ...',
+  '/corral close             release every teammate and close the container',
 ].join('\n')
 
 // Module state: the session is either a teammate (`me` set) or a lead following `activeTeam`.
@@ -172,7 +173,6 @@ async function focusTeammate($: EngineInterface, name: string): Promise<void> {
   await $.process.run([bin, 'agent', 'focus', name], { timeoutMs: 5_000 })
 }
 
-const TASK_TOOLS = ['task_list', 'task_claim_next', 'task_complete'] as const
 
 // Wraps the task board for every session of the team as tools, so builders use it
 // the way they use the native task tools instead of remembering Bash incantations.
@@ -238,12 +238,18 @@ export const register: Register = (on, options) => {
       return next(e)
     }
     state.ownSessionId = await $.session.id()
-    await $.command.register({
-      name: 'roundup',
-      description: 'roundup team: status, pane, use, init, task, close',
-      argumentHint: 'status | pane | use <team> | init ... | task ... | close',
-      immediate: true,
-    })
+    // The plugin's skill owns /roundup:roundup, and the engine refuses a command that
+    // shadows the plugin's own namespace, hence a second word for the lead's command.
+    try {
+      await $.command.register({
+        name: COMMAND,
+        description: 'roundup team: status, pane, use, init, task, close',
+        argumentHint: 'status | pane | use <team> | init ... | task ... | close',
+        immediate: true,
+      })
+    } catch (e) {
+      $.ui.log(`roundup: /${COMMAND} not registered: ${e instanceof Error ? e.message : String(e)}`, { to: 'debug' })
+    }
     state.activeTeam = await discoverTeam($)
     if (state.activeTeam) await registerTaskTools($)
     $.clock.every(POLL_INTERVAL_MS, () => void refresh($).catch(() => undefined))
@@ -300,7 +306,7 @@ export const register: Register = (on, options) => {
     return next(e)
   }).catch(($, e, next) => next(e))
 
-  on('command.run', { command: 'roundup' }, async ($, e) => {
+  on('command.run', { command: COMMAND }, async ($, e) => {
     const [sub, ...rest] = tokenize(e.args)
     switch (sub) {
       case undefined:
@@ -319,7 +325,7 @@ export const register: Register = (on, options) => {
         return { text: opened.isPlaced ? 'roundup pane opened.' : `roundup pane is waiting: ${opened.reason}` }
       }
       case 'status': {
-        if (!state.activeTeam) return { text: 'roundup: no active team. /roundup use <team> or /roundup init ...' }
+        if (!state.activeTeam) return { text: 'roundup: no active team. /corral use <team> or /corral init ...' }
         const r = await cli($, ['status', state.activeTeam])
         if (!r.json) return { text: `roundup status failed: ${r.error?.message ?? r.stdout}` }
         const view = r.json as unknown as TeamView
@@ -368,7 +374,7 @@ export const register: Register = (on, options) => {
     if (!view) {
       return (
         <Box flexDirection="column">
-          <Text dimColor>No active roundup team. Run /roundup use &lt;team&gt; or /roundup init ...</Text>
+          <Text dimColor>No active roundup team. Run /corral use &lt;team&gt; or /corral init ...</Text>
         </Box>
       )
     }

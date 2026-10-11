@@ -18,6 +18,10 @@ Teammates run a native `claude`, so every path handed to one must be a native Wi
 
 Inside a teammate, Bash is Git Bash: a backslash path must be quoted (`git -C "C:\code\app" log`), or the backslashes vanish. That is a teammate's own quoting, not roundup's.
 
+## Slash commands typed from Git Bash
+
+MSYS, the layer under Git Bash, rewrites an argument that starts with a slash into a Windows path before a native program sees it, so `roundup prompt team name "/exit"` would arrive as `C:/Program Files/Git/exit`. The CLI undoes that rewrite for prompt text using Git's `EXEPATH`. Raw `herdr agent prompt` calls from Bash need `MSYS_NO_PATHCONV=1` in front of them.
+
 ## CRLF
 
 Some tools on Windows emit CRLF line endings (the Chocolatey `jq` build does, which broke the original bash prototype). `src/herdr.mjs` strips `\r` from everything herdr prints before parsing it, and the fake herdr used in tests can emit CRLF to prove it.

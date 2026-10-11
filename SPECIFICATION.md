@@ -64,7 +64,7 @@ This document is the implementation plan for the `roundup` Claude Code plugin. I
 flowchart LR
   subgraph Lead["Lead session"]
     S[Skill: roundup] --> C[bin/roundup CLI]
-    M1[Mod: lead hooks\n/roundup command, pane,\nmessage log]
+    M1[Mod: lead hooks\n/corral command, pane,\nmessage log]
   end
 
   subgraph herdr["herdr server"]
@@ -99,7 +99,7 @@ Three pieces cooperate, and each works without the others where it can:
 
 - **The skill** is the orchestration brain. It tells the lead how to frame, spawn, facilitate, synthesize, and close, and when to use each layout and retention policy. It calls the CLI for herdr mechanics and the model's own `SendMessage` for content.
 - **The CLI** is the deterministic part: herdr topology, session startup, readiness detection, kickoff, manifest bookkeeping, teardown, and the task board. It runs anywhere Node runs, with no dependencies.
-- **The mod** tightens integration where hooks inside the sessions beat scripts outside them: injecting the brief as the user's own words, enforcing role kinds on tool calls, pinging the lead when a teammate's turn ends, and giving the lead a `/roundup` command and pane. Every hook is a no-op unless the `ROUNDUP_*` environment variables or a team manifest say the session is part of a team, so the plugin is inert in ordinary sessions.
+- **The mod** tightens integration where hooks inside the sessions beat scripts outside them: injecting the brief as the user's own words, enforcing role kinds on tool calls, pinging the lead when a teammate's turn ends, and giving the lead a `/corral` command and pane. Every hook is a no-op unless the `ROUNDUP_*` environment variables or a team manifest say the session is part of a team, so the plugin is inert in ordinary sessions.
 
 Degradation order: skill plus CLI is the complete v0.1 and works without the mod. The mod adds reliability and visibility on top. The task board is used only by `build-together` teams.
 
@@ -322,7 +322,7 @@ Target size: SKILL.md under 200 lines; the references are loaded on demand.
 `hooks/register.ts`, loaded in every session that has the plugin enabled. Two personalities, decided at `session.start`:
 
 - **Teammate mode** when `ROUNDUP_TEAM` and `ROUNDUP_NAME` are set in the environment (`$.env.get`).
-- **Lead mode** when the session is not a teammate. Lead hooks stay inert until `/roundup` is used or a manifest in the teams root names this session as lead (by `ROUNDUP_LEAD_SESSION_ID` equal to `$.session.id()`).
+- **Lead mode** when the session is not a teammate. Lead hooks stay inert until `/corral` is used or a manifest in the teams root names this session as lead (by `ROUNDUP_LEAD_SESSION_ID` equal to `$.session.id()`).
 
 ```mermaid
 stateDiagram-v2
@@ -334,9 +334,9 @@ stateDiagram-v2
   Working --> Working: turn.complete pings lead
   Working --> [*]: session.end
   Lead --> Idle
-  Idle --> Active: /roundup init or manifest names this session
+  Idle --> Active: /corral init or manifest names this session
   Active --> Active: session.receive logs team messages, pane redraws
-  Active --> Idle: /roundup close
+  Active --> Idle: /corral close
 ```
 
 ### 7.1 Teammate hooks
@@ -353,11 +353,11 @@ stateDiagram-v2
 
 | Hook | Behavior |
 | :- | :- |
-| `session.start` | Register `/roundup` with `immediate: true` and `argumentHint: "status | pane | close | task list"`. |
-| `command.run` `/roundup status` | Run `roundup status <team>` through `$.process.run` and return its summary as `{ text }`. |
-| `command.run` `/roundup pane` | `$.ui.open({ id: 'roundup', title: 'roundup', focus: true, closeOnEscape: true })`. |
-| `command.run` `/roundup close` | Run `roundup close <team>` and return the result. |
-| `command.run` `/roundup init <args>` | Run `roundup init` with `--lead-session-id $.session.id()` appended, so teammates can ping this session. The skill prefers this form when the mod is present. |
+| `session.start` | Register `/corral` with `immediate: true` and `argumentHint: "status | pane | close | task list"`. |
+| `command.run` `/corral status` | Run `roundup status <team>` through `$.process.run` and return its summary as `{ text }`. |
+| `command.run` `/corral pane` | `$.ui.open({ id: 'roundup', title: 'roundup', focus: true, closeOnEscape: true })`. |
+| `command.run` `/corral close` | Run `roundup close <team>` and return the result. |
+| `command.run` `/corral init <args>` | Run `roundup init` with `--lead-session-id $.session.id()` appended, so teammates can ping this session. The skill prefers this form when the mod is present. |
 | `ui.render` `Pane` | Draw: team name and layout; one row per teammate with name, kind, herdr state (`idle`/`working`/`blocked`/`gone`), last message first line, and buttons `focus` (herdr agent focus), `read` (toast the last 10 lines), `release`. Below: task board summary when `tasks.json` exists. State comes from a `$.clock.every(3000)` poll of `roundup status` stored in `$.state`. |
 | `session.receive` | When `from-name` is a teammate of the active team, append to the lead's message log and update the teammate's `lastMessage` in `$.state`. Never consume. |
 | `ui.render` `Spinner` | While a team is active and the lead is waiting on teammates, suffix the spinner with `· waiting on modal-ux, modal-pm`. |
@@ -366,7 +366,7 @@ stateDiagram-v2
 
 - Hook execution budget is 10 seconds per event; `$.process.run` defaults to 30 seconds. Status polling runs `roundup status`, which is a couple of herdr calls, well under a second.
 - `$.store` is shared across sessions but not atomic; it is used only as a cache for the pane. Authoritative state is the manifest and task files (section 9).
-- A pane opened unasked only appears from 144 columns. `/roundup pane` is user-initiated, so it appears at any width.
+- A pane opened unasked only appears from 144 columns. `/corral pane` is user-initiated, so it appears at any width.
 - The module has no Node APIs. Anything needing a process goes through `$.process.run(['roundup', ...])`, which resolves on the Bash tool PATH only inside the Bash tool; inside the mod it must use the absolute path `${CLAUDE_PLUGIN_ROOT}/bin/roundup`, which `$.plugin.root()` provides.
 - Tests run with `claude plugin test` and mount the pane on both `terminal` and `desktop`.
 
@@ -583,7 +583,7 @@ Branch policy once the first release is out: feature branches, PRs into `main`, 
 | :- | :- | :- |
 | M0 Scaffold | Repo layout, manifest, marketplace, CI validating an empty plugin, README skeleton, `.claude/CLAUDE.md`, LICENSE | `claude plugin validate . --strict` passes in CI on both OSes |
 | M1 CLI + skill (v0.1.0) | `bin/roundup` with preflight, init, spawn, status, read, wait, prompt, keys, release, close, dir, doctor; unit tests with fake herdr; skill and references ported; agents | A real team of two advisors runs end to end on Windows inside and outside herdr, matching the prototype's verified behavior; install from the marketplace works |
-| M2 Mod core (v0.2.0) | Teammate detection, auto-brief, role guard, turn-complete ping, lead `/roundup` command and pane, mod tests, type check in CI | Spawn with the mod loaded shows `kickoff: mod`; advisor cannot Edit; lead receives turn pings; pane renders on terminal and desktop in tests |
+| M2 Mod core (v0.2.0) | Teammate detection, auto-brief, role guard, turn-complete ping, lead `/corral` command and pane, mod tests, type check in CI | Spawn with the mod loaded shows `kickoff: mod`; advisor cannot Edit; lead receives turn pings; pane renders on terminal and desktop in tests |
 | M3 Task board (v0.3.0) | `roundup task` commands, lock, dependency unblocking, mod-registered tools, build-together protocol in the skill | Two builders claim disjoint tasks concurrently without a double claim in a stress test; a build-together run completes a small feature |
 | M4 Polish (v1.0.0) | Skill trigger evals, docs complete, comparison doc, troubleshooting, screenshots, release workflow exercised | A fresh user can install and run the README demo without reading this spec |
 
