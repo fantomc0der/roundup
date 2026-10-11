@@ -37,7 +37,8 @@ function world(on: On, { manifest = MANIFEST as Record<string, unknown> | undefi
   on('fs.read', (_$, e) => {
     const path = e.path.replace(/\\/g, '/')
     if (path.endsWith('/manifest.json') && manifest) return { value: JSON.stringify(manifest) }
-    const hit = Object.entries(files).find(([p]) => p.replace(/\\/g, '/') === path)
+    // Suffix match: on Linux the engine resolves a Windows-style path against the cwd before the hook sees it.
+    const hit = Object.entries(files).find(([p]) => path.endsWith(p.replace(/\\/g, '/')))
     return hit ? { value: hit[1] } : { deny: `ENOENT ${e.path}` }
   })
   on('fs.write', (_$, e) => {

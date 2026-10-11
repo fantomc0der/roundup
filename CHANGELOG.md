@@ -20,5 +20,6 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - `roundup prompt` undoes the Git Bash path rewrite that turned a typed `/exit` into `C:/Program Files/Git/exit` on Windows.
 - The lead command is `/corral`, because the engine refuses a command that shadows the plugin's own `/roundup:roundup` skill namespace.
+- The lead follows the open team under the teams root at session start; the discovery tested directory entries for a kind the engine never reports.
 
 [Unreleased]: https://github.com/fantomc0der/roundup/compare/main...HEAD

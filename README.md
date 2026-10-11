@@ -104,7 +104,7 @@ Native agent teams give an in-engine task list, typed shutdown and plan-approval
 
 ## Development
 
-`.claude/CLAUDE.md` has the conventions and `SPECIFICATION.md` the design. `npm run validate`, `npm test`, `npm run test:mod`, `npm run typecheck`, and `npm run check:release` are what CI runs. Releases are cut with `npm run release -- <major|minor|patch>` and a `vX.Y.Z` tag on `main`.
+`.claude/CLAUDE.md` has the conventions and `SPECIFICATION.md` the design. `npm run validate`, `npm test`, `npm run test:mod`, `npm run typecheck`, and `npm run check:release` are what CI runs. Releases are cut with `npm run release -- <major|minor|patch|x.y.z>` and a `vX.Y.Z` tag on `main`.
 
 ## License
 
