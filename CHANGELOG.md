@@ -14,6 +14,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - `roundup task`, a lock-guarded task board for build-together teams with dependencies, ownership warnings, and `task_list`, `task_claim_next`, and `task_complete` tools in every team session.
 - A fake herdr for unit tests and `claude plugin test` coverage for the mod.
 - Docs: architecture, comparison with native agent teams, and Windows notes.
+- Release tooling: `npm run release -- <bump>` moves the version across the manifests and cuts the changelog section, `npm run check:release` verifies they agree, and CI gates pull requests on a changelog entry for shipped changes.
 
 ### Fixed
 

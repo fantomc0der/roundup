@@ -45,6 +45,8 @@ jobs:
         run: npm run typecheck
       - name: Unit tests
         run: npm test
+      - name: Manifests and changelog agree on the version
+        run: npm run check:release
       - name: Unit tests under Git Bash
         if: runner.os == 'Windows'
         shell: bash
@@ -52,3 +54,21 @@ jobs:
       - name: Mod tests
         if: hashFiles('hooks/hooks.json') != ''
         run: claude plugin test .
+
+  # A change to what ships owes a changelog entry, and a version bump owes its dated
+  # section with an empty Unreleased. The skip-changelog label waives the first rule.
+  release-gate:
+    name: changelog and version gate
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Check the diff against the base branch
+        env:
+          SKIP_CHANGELOG: ${{ contains(github.event.pull_request.labels.*.name, 'skip-changelog') && '1' || '' }}
+        run: node scripts/check-release.mjs --base origin/${{ github.base_ref }}
