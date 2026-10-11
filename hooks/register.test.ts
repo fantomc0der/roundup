@@ -25,7 +25,7 @@ const MANIFEST = {
 type ProcessAnswer = (argv: readonly string[]) => { exitCode: number; stdout: string; stderr: string }
 const okProcess: ProcessAnswer = () => ({ exitCode: 0, stdout: '{}', stderr: '' })
 
-function world(on: On, { manifest = MANIFEST as Record<string, unknown> | undefined, files = {} as Record<string, string>, process = okProcess } = {}) {
+function world(on: On, { manifest = MANIFEST as Record<string, unknown> | undefined, files = {} as Record<string, string>, process = okProcess, dirs = [] as string[] } = {}) {
   const writes: Array<{ path: string; text: string }> = []
   const sent: Array<{ to: unknown; text: string }> = []
   const submitted: string[] = []
@@ -37,14 +37,15 @@ function world(on: On, { manifest = MANIFEST as Record<string, unknown> | undefi
   on('fs.read', (_$, e) => {
     const path = e.path.replace(/\\/g, '/')
     if (path.endsWith('/manifest.json') && manifest) return { value: JSON.stringify(manifest) }
-    const hit = Object.entries(files).find(([p]) => p.replace(/\\/g, '/') === path)
+    // Suffix match: on Linux the engine resolves a Windows-style path against the cwd before the hook sees it.
+    const hit = Object.entries(files).find(([p]) => path.endsWith(p.replace(/\\/g, '/')))
     return hit ? { value: hit[1] } : { deny: `ENOENT ${e.path}` }
   })
   on('fs.write', (_$, e) => {
     writes.push({ path: e.path, text: e.text })
     return { value: undefined }
   })
-  on('fs.list', () => ({ value: [] }))
+  on('fs.list', () => ({ value: dirs.map(name => ({ name, kind: 'dir' as const, size: 0, mtimeMs: 0, isLink: false })) }))
   on('fs.exists', () => ({ value: false }))
   on('session.id', () => ({ value: 'lead-session' }))
   on('session.send', (_$, e) => {
@@ -236,6 +237,17 @@ describe('lead', () => {
     expect(none.text).toContain('no active team')
   })
 
+  test('a lead follows the only open team under the teams root at start', async ($, on) => {
+    mock.env(on, { ROUNDUP_TEAMS_ROOT: 'C:\\teams' })
+    const clock = mock.clock(on)
+    const w = world(on, { manifest: { ...MANIFEST, leadSessionId: null }, dirs: ['modal'], process: statusProcess })
+    await start($)
+    await clock.settle()
+    expect(w.ran.some(a => a.includes('status') && a.includes('modal'))).toBe(true)
+    const out = await run($, 'status')
+    expect(out.text).toContain('modal (split')
+  })
+
   test('init appends the lead session id and follows the new team', async ($, on) => {
     mock.env(on, {})
     const clock = mock.clock(on)
@@ -255,6 +267,76 @@ describe('lead', () => {
     expect(init[0]).toBe('node')
     expect(init.at(-2)).toBe('--lead-session-id')
     expect(init.at(-1)).toBe('lead-session')
+  })
+
+  const STATUS = {
+    team: 'modal',
+    status: 'open',
+    layout: 'split',
+    retention: 'auto',
+    lead: 'lead-1',
+    dir: 'C:\\teams\\modal',
+    teammates: [
+      { name: 'modal-ux', kind: 'advisor', role: 'UX', state: 'idle', paneId: 'w1:p2', kickoff: 'mod' },
+      { name: 'modal-engineer', kind: 'builder', role: 'Engineer', state: 'blocked', paneId: 'w1:p3', kickoff: 'mod' },
+    ],
+  }
+  const BOARD = JSON.stringify({ tasks: [{ status: 'done' }, { status: 'done' }, { status: 'done' }, { status: 'in_progress' }, { status: 'pending' }, { status: 'blocked' }] })
+  const statusProcess: ProcessAnswer = argv => ({ exitCode: 0, stderr: '', stdout: argv.includes('status') ? JSON.stringify(STATUS) : '{}' })
+  const mountPane = ($: Engine, bodyColumns: number) =>
+    $.ui.mount({ plugin: 'roundup', surface: 'terminal', component: 'Pane', requestId: 'roundup', props: { title: 'roundup', isFocused: false, bodyColumns, placement: 'dock', scroll: { offset: 0, bodyRows: 20 }, view: {} } })
+  const run = ($: Engine, args: string) => $.command.run({ command: 'corral', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+
+  test('the pane lays out a followed team in columns with a note under each teammate', async ($, on) => {
+    mock.env(on, {})
+    const clock = mock.clock(on)
+    world(on, { manifest: undefined, files: { 'C:\\teams\\modal\\tasks.json': BOARD }, process: statusProcess })
+    await start($)
+    await run($, 'use modal')
+    await clock.settle()
+    const ui = await mountPane($, 80)
+    expect(await ui.find({ type: 'Text', text: 'modal-engineer' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^builder$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^blocked$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /waiting on a prompt/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /no messages yet/ })).toBeDefined()
+    expect(await ui.findAll({ type: 'Button' })).toHaveLength(4)
+    expect(await ui.find({ type: 'Text', text: '3/6 done' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /1 blocked/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /updated \d+s ago/ })).toBeDefined()
+    await ui.unmount()
+  })
+
+  test('the pane drops the kind column when the body is too narrow for it', async ($, on) => {
+    mock.env(on, {})
+    const clock = mock.clock(on)
+    world(on, { manifest: undefined, process: statusProcess })
+    await start($)
+    await run($, 'use modal')
+    await clock.settle()
+    const wide = await mountPane($, 80)
+    expect(await wide.find({ type: 'Text', text: /^advisor$/ })).toBeDefined()
+    await wide.unmount()
+    const narrow = await mountPane($, 40)
+    expect(await narrow.find({ type: 'Text', text: /^advisor$/ })).toBeUndefined()
+    expect(await narrow.find({ type: 'Text', text: 'modal-engineer' })).toBeDefined()
+    expect(await narrow.findAll({ type: 'Button' })).toHaveLength(4)
+    await narrow.unmount()
+  })
+
+  test('the pane says when the team is closed', async ($, on) => {
+    mock.env(on, {})
+    const clock = mock.clock(on)
+    world(on, { manifest: undefined, process: statusProcess })
+    await start($)
+    await run($, 'use modal')
+    await clock.settle()
+    await run($, 'close')
+    await clock.settle()
+    const ui = await mountPane($, 80)
+    expect(await ui.find({ type: 'Text', text: /Team closed/ })).toBeDefined()
+    expect(await ui.findAll({ type: 'Button' })).toHaveLength(0)
+    await ui.unmount()
   })
 
   test('the pane draws on terminal and desktop', async ($, on) => {

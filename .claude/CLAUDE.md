@@ -32,5 +32,6 @@ roundup is a Claude Code plugin. It bundles a skill (`skills/roundup/`), a zero-
 
 ## Versioning and release
 
-- `version` in `.claude-plugin/plugin.json` and `package.json` must match. Bump both with a `CHANGELOG.md` section.
-- Tag `vX.Y.Z` on `main` triggers `release.yml`, which checks the tag against the manifests and publishes a GitHub release with the changelog section as the body.
+- Versions move at release time, not per PR. A PR that changes what ships (`src/`, `bin/`, `hooks/` outside tests, `skills/`, `agents/`, `plugin.json`, `types/index.d.ts`) adds an entry under `## [Unreleased]` in `CHANGELOG.md`; CI's `release-gate` job fails without one unless the PR carries the `skip-changelog` label.
+- `version` in `.claude-plugin/plugin.json`, `package.json`, and `package-lock.json` must match, and the newest `CHANGELOG.md` section must be that version. `npm run check:release` verifies this locally and in CI.
+- To cut a release, on a branch run `npm run release -- <major|minor|patch|x.y.z>` (add `--dry-run` to preview). It bumps the three manifests, turns Unreleased into a dated `## [x.y.z]` section, and fixes the compare links; commit it as `chore: release vX.Y.Z` and open a PR. Once it lands, tag `vX.Y.Z` on `main` (`git tag vX.Y.Z && git push origin vX.Y.Z`), which triggers `release.yml`: it checks the tag against the manifests and publishes a GitHub release with the changelog section as the body.

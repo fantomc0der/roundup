@@ -32,6 +32,7 @@ jobs:
           required=(
             "check (ubuntu-latest)"
             "check (windows-latest)"
+            "changelog and version gate"
           )
           deadline=$(( $(date +%s) + 3600 ))
           while :; do

@@ -76,7 +76,7 @@ async function discoverTeam($: EngineInterface): Promise<string | null> {
   }
   const open: Array<{ team: string; leadSessionId?: string | null }> = []
   for (const entry of entries) {
-    if (entry.kind !== 'directory') continue
+    if (entry.kind !== 'dir') continue
     const manifest = await readManifest($, `${root}/${entry.name}`)
     if (manifest?.status === 'open') open.push({ team: manifest.team, leadSessionId: manifest.leadSessionId })
   }
@@ -211,6 +211,38 @@ async function taskTool($: EngineInterface, args: string[]) {
 
 const stateColor = (s: string) => (s === 'working' ? 'yellow' : s === 'blocked' ? 'red' : s === 'gone' ? 'gray' : 'green')
 
+// Cells of a teammate row that never shrink: the state dot, `[ focus ] [ release ]`, and the
+// gaps around them. The kind column needs its own width plus one gap on top of this.
+const ROW_CHROME = 26
+const BAR_CELLS = 12
+const PANE_COLUMNS = 72
+
+const ago = (now: number, at: number) => {
+  const s = Math.max(0, Math.round((now - at) / 1000))
+  return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m` : `${Math.floor(s / 3600)}h`
+}
+
+// Column widths for the teammate rows. Names and kinds take what the longest needs; the kind
+// column is dropped first when the body is too narrow, then names truncate.
+function rowColumns(teammates: TeammateRow[], bodyColumns: number) {
+  const longest = (pick: (t: TeammateRow) => string) => teammates.reduce((n, t) => Math.max(n, pick(t).length), 0)
+  const kind = longest(t => t.kind)
+  const state = Math.max(7, longest(t => t.state))
+  const wanted = Math.min(24, Math.max(6, longest(t => t.name)))
+  const showKind = ROW_CHROME + wanted + kind + 1 + state <= bodyColumns
+  const name = Math.min(wanted, Math.max(6, bodyColumns - ROW_CHROME - state - (showKind ? kind + 1 : 0)))
+  return { name, kind, state, showKind }
+}
+
+// The line under a teammate's name: what needs the person's attention first, else the last message.
+function teammateNote(t: TeammateRow, now: number): { text: string; color?: string; dim: boolean } {
+  if (t.state === 'gone') return { text: 'session ended', dim: true }
+  if (t.kickoff === 'stalled') return { text: 'kickoff stalled: open its pane and start it by hand', color: 'yellow', dim: false }
+  if (t.state === 'blocked') return { text: 'waiting on a prompt in its pane', color: 'red', dim: false }
+  if (t.lastMessage === undefined) return { text: 'no messages yet', dim: true }
+  return { text: t.lastMessageAt === undefined ? t.lastMessage : `${ago(now, t.lastMessageAt)} · ${t.lastMessage}`, dim: true }
+}
+
 export const register: Register = (on, options) => {
   state.advisorBash = (options?.advisor_bash as AdvisorBash | undefined) ?? 'readonly-heuristic'
 
@@ -320,7 +352,8 @@ export const register: Register = (on, options) => {
         return { text: `roundup: following team ${rest[0]}` }
       }
       case 'pane': {
-        const opened = await $.ui.open({ id: PANE, title: 'roundup', focus: true, closeOnEscape: true })
+        // Wide enough for the full row: dot, a long name, kind, state, and both buttons.
+        const opened = await $.ui.open({ id: PANE, title: 'roundup', focus: true, closeOnEscape: true, columns: PANE_COLUMNS })
         if (state.activeTeam) void refresh($).catch(() => undefined)
         return { text: opened.isPlaced ? 'roundup pane opened.' : `roundup pane is waiting: ${opened.reason}` }
       }
@@ -372,41 +405,120 @@ export const register: Register = (on, options) => {
     const { Box, Text, Button } = $.ui.resolve(e)
     const view = await read($, teamView)
     if (!view) {
+      // Side by side when the explanation fits beside the widest command, else each command over its explanation.
+      const sideBySide = e.props.bodyColumns >= 34 + 2 + 28
+      const help = (command: string, why: string) => (
+        <Box key={command} flexDirection={sideBySide ? 'row' : 'column'} gap={sideBySide ? 2 : 0}>
+          <Box width={sideBySide ? 34 : undefined} flexShrink={0}>
+            <Text wrap="truncate-end">{command}</Text>
+          </Box>
+          <Box paddingLeft={sideBySide ? 0 : 2}>
+            <Text dimColor>{why}</Text>
+          </Box>
+        </Box>
+      )
       return (
-        <Box flexDirection="column">
-          <Text dimColor>No active roundup team. Run /corral use &lt;team&gt; or /corral init ...</Text>
+        <Box flexDirection="column" gap={1}>
+          <Text dimColor>No active roundup team.</Text>
+          <Box flexDirection="column" gap={sideBySide ? 0 : 1}>
+            {help('/corral init <team> --lead <name>', 'start a team')}
+            {help('/corral use <team>', 'follow one started from Bash')}
+          </Box>
         </Box>
       )
     }
+    const now = await $.clock.now()
+    const open = view.status === 'open'
+    const cols = rowColumns(view.teammates, e.props.bodyColumns)
+    const tasks = view.tasks
+    const filled = tasks && tasks.total > 0 ? Math.round((tasks.done / tasks.total) * BAR_CELLS) : 0
     return (
       <Box flexDirection="column">
-        <Box flexDirection="row" gap={1}>
-          <Text bold>{view.team}</Text>
-          <Text dimColor>
-            {view.layout} · {view.retention} · {view.status}
-          </Text>
+        <Box flexDirection="row" justifyContent="space-between" gap={2}>
+          <Box flexDirection="row" gap={1} flexShrink={1} minWidth={0}>
+            <Box flexShrink={0}>
+              <Text bold>{view.team}</Text>
+            </Box>
+            <Text dimColor wrap="truncate-end">
+              {view.layout} · {view.retention} · {view.status}
+            </Text>
+          </Box>
+          {e.props.bodyColumns >= 60 && (
+            <Box flexShrink={0}>
+              <Text dimColor>updated {ago(now, view.polledAt)} ago</Text>
+            </Box>
+          )}
         </Box>
-        {view.teammates.length === 0 && <Text dimColor>No teammates yet.</Text>}
-        {view.teammates.map(t => (
-          <Box key={t.name} flexDirection="row" gap={1}>
-            <Text>{t.name}</Text>
-            <Text dimColor>{t.kind}</Text>
-            <Text color={stateColor(t.state)}>{t.state}</Text>
-            {t.lastMessage !== undefined && (
-              <Text dimColor wrap="truncate-end">
-                {t.lastMessage}
+        {view.error && (
+          <Box marginTop={1}>
+            <Text color="red">status unavailable: {view.error}</Text>
+          </Box>
+        )}
+        {!open && (
+          <Box marginTop={1}>
+            <Text dimColor>Team closed. Start another with /corral init &lt;team&gt; --lead &lt;name&gt;.</Text>
+          </Box>
+        )}
+        {open && view.teammates.length === 0 && (
+          <Box marginTop={1}>
+            <Text dimColor>No teammates yet. The lead spawns them with roundup spawn.</Text>
+          </Box>
+        )}
+        {view.teammates.map(t => {
+          const note = teammateNote(t, now)
+          return (
+            <Box key={t.name} flexDirection="column" marginTop={1}>
+              <Box flexDirection="row" justifyContent="space-between" gap={2}>
+                <Box flexDirection="row" gap={1} flexShrink={1} minWidth={0}>
+                  <Text color={stateColor(t.state)}>●</Text>
+                  <Box width={cols.name} flexShrink={0}>
+                    <Text bold wrap="truncate-end">
+                      {t.name}
+                    </Text>
+                  </Box>
+                  {cols.showKind && (
+                    <Box width={cols.kind} flexShrink={0}>
+                      <Text dimColor>{t.kind}</Text>
+                    </Box>
+                  )}
+                  <Box width={cols.state} flexShrink={0}>
+                    <Text color={stateColor(t.state)}>{t.state}</Text>
+                  </Box>
+                </Box>
+                <Box flexDirection="row" gap={1} flexShrink={0}>
+                  <Button key={`focus:${t.name}`} label="focus" dimColor={t.state === 'gone'} hover={{ bold: true }} onPress={() => void focusTeammate($, t.name).catch(() => undefined)} />
+                  <Button key={`release:${t.name}`} label="release" hover={{ bold: true }} onPress={() => void releaseTeammate($, view.team, t.name).catch(() => undefined)} />
+                </Box>
+              </Box>
+              <Box flexDirection="row" paddingLeft={2} gap={1}>
+                <Text dimColor>⎿</Text>
+                <Text color={note.color} dimColor={note.dim} wrap="truncate-end" hover={{ dimColor: false }}>
+                  {note.text}
+                </Text>
+              </Box>
+            </Box>
+          )
+        })}
+        {tasks && (
+          <Box flexDirection="row" gap={1} marginTop={1}>
+            <Text dimColor>tasks</Text>
+            {tasks.total === 0 && <Text dimColor>none on the board yet</Text>}
+            {tasks.total > 0 && (
+              <Box flexDirection="row">
+                <Text color="green">{'█'.repeat(filled)}</Text>
+                <Text dimColor>{'░'.repeat(BAR_CELLS - filled)}</Text>
+              </Box>
+            )}
+            {tasks.total > 0 && (
+              <Text>
+                {tasks.done}/{tasks.total} done
               </Text>
             )}
-            <Button key={`focus:${t.name}`} label="focus" onPress={() => void focusTeammate($, t.name).catch(() => undefined)} />
-            <Button key={`release:${t.name}`} label="release" onPress={() => void releaseTeammate($, view.team, t.name).catch(() => undefined)} />
+            {tasks.inProgress > 0 && <Text color="yellow">· {tasks.inProgress} in progress</Text>}
+            {tasks.pending > 0 && <Text dimColor>· {tasks.pending} pending</Text>}
+            {tasks.blocked > 0 && <Text color="red">· {tasks.blocked} blocked</Text>}
           </Box>
-        ))}
-        {view.tasks && (
-          <Text dimColor>
-            tasks: {view.tasks.done}/{view.tasks.total} done, {view.tasks.inProgress} in progress, {view.tasks.pending} pending, {view.tasks.blocked} blocked
-          </Text>
         )}
-        {view.error && <Text color="red">{view.error}</Text>}
       </Box>
     )
   })
