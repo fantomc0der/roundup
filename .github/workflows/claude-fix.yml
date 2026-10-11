@@ -43,7 +43,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm install -g @anthropic-ai/claude-code@2.1.296
-      - uses: anthropics/claude-code-action@v1.0.240
+      - uses: anthropics/claude-code-action@v1.0.247
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.PR_AUTOMATION_PAT }}
