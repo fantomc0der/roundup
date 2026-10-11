@@ -1,0 +1,18 @@
+{
+  "name": "roundup-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Round up a team of Claude Code sessions in herdr panes, let them argue it out, then build.",
+  "type": "module",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "test": "node --test \"tests/unit/**/*.test.mjs\"",
+    "validate": "claude plugin validate . --strict",
+    "test:mod": "claude plugin test .",
+    "typecheck": "tsc -p .",
+    "check": "npm run validate && npm test"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

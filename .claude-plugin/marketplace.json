@@ -1,0 +1,16 @@
+{
+  "name": "roundup",
+  "owner": {
+    "name": "fantomc0der"
+  },
+  "plugins": [
+    {
+      "name": "roundup",
+      "source": "./",
+      "description": "Round up a team of Claude Code sessions in herdr panes, let them argue it out, then build."
+    }
+  ],
+  "metadata": {
+    "description": "Round up a team of Claude Code sessions in herdr panes, let them argue it out, then build."
+  }
+}
