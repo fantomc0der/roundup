@@ -48,6 +48,10 @@ test('init in tab layout creates a labeled tab in the lead workspace without foc
   assert.ok(create.includes('--no-focus'))
   assert.equal(create[create.indexOf('--label') + 1], 'team:modal')
   assert.equal(create[create.indexOf('--workspace') + 1], 'w1')
+  const env = create.flatMap((a, i) => (a === '--env' ? [create[i + 1]] : []))
+  assert.ok(env.includes('ROUNDUP_TEAM=modal'))
+  assert.ok(env.includes('ROUNDUP_LEAD=lead-1'))
+  assert.ok(env.some(e => e.startsWith('ROUNDUP_DIR=')))
 })
 
 test('init outside herdr uses the focused workspace, or creates one when none exists', () => {

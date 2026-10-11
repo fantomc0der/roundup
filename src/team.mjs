@@ -7,6 +7,12 @@ import { sameDir, toNative } from './paths.mjs'
 import { CliError } from './errors.mjs'
 import { sleep } from './clock.mjs'
 
+export function teamEnv({ team, dir, lead, leadSessionId }) {
+  const env = { ROUNDUP_TEAM: team, ROUNDUP_DIR: dir, ROUNDUP_LEAD: lead }
+  if (leadSessionId) env.ROUNDUP_LEAD_SESSION_ID = leadSessionId
+  return Object.entries(env).flatMap(([k, v]) => ['--env', `${k}=${v}`])
+}
+
 export function insideHerdr() {
   return process.env.HERDR_ENV === '1' && Boolean(process.env.HERDR_PANE_ID)
 }
@@ -56,8 +62,12 @@ export function init({ team, lead, leadSessionId, layout = 'auto', defaultLayout
   let rootPaneId = null
   const created = { workspace: false, tab: false }
   const label = `team:${team}`
+  const dir = manifest.teamDir(team)
+  // The container's root pane goes to the first teammate, whose name is not known yet.
+  // Team-level variables let the mod find that teammate in the manifest by its HERDR_PANE_ID.
+  const envArgs = teamEnv({ team, dir, lead, leadSessionId })
   const createWorkspace = () => {
-    const r = herdr.json(['workspace', 'create', '--cwd', teamCwd, '--label', label, '--no-focus']).result
+    const r = herdr.json(['workspace', 'create', '--cwd', teamCwd, '--label', label, ...envArgs, '--no-focus']).result
     workspaceId = r.workspace.workspace_id
     tabId = r.tab.tab_id
     rootPaneId = r.root_pane.pane_id
@@ -74,7 +84,7 @@ export function init({ team, lead, leadSessionId, layout = 'auto', defaultLayout
       layout = 'workspace'
       resolved.note = 'no herdr workspace was open, so a new one was created'
     } else {
-      const r = herdr.json(['tab', 'create', '--workspace', workspaceId, '--cwd', teamCwd, '--label', label, '--no-focus']).result
+      const r = herdr.json(['tab', 'create', '--workspace', workspaceId, '--cwd', teamCwd, '--label', label, ...envArgs, '--no-focus']).result
       tabId = r.tab.tab_id
       rootPaneId = r.root_pane.pane_id
       created.tab = true
@@ -83,7 +93,6 @@ export function init({ team, lead, leadSessionId, layout = 'auto', defaultLayout
     createWorkspace()
   }
 
-  const dir = manifest.teamDir(team)
   mkdirSync(join(dir, 'briefs'), { recursive: true })
   mkdirSync(join(dir, 'shared'), { recursive: true })
   writeFileSync(join(dir, 'settings.json'), JSON.stringify({ crossSessionInbound: 'accept' }) + '\n')
