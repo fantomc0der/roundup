@@ -33,6 +33,7 @@ jobs:
           version="${TAG#v}"
           awk -v v="$version" '
             /^## \[/ { printing = ($0 ~ "^## \\[" v "\\]") }
+            /^\[[^]]+\]: / { printing = 0 }
             printing { print }
           ' CHANGELOG.md > release-notes.md
           if [ ! -s release-notes.md ]; then

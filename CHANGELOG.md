@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-11
+
 ### Added
 
 - Repository scaffold: plugin and marketplace manifests, CI, release workflow, Dependabot, contributor instructions.
@@ -22,4 +24,5 @@ All notable changes to this project are documented here. The format follows [Kee
 - The lead command is `/corral`, because the engine refuses a command that shadows the plugin's own `/roundup:roundup` skill namespace.
 - The lead follows the open team under the teams root at session start; the discovery tested directory entries for a kind the engine never reports.
 
-[Unreleased]: https://github.com/fantomc0der/roundup/compare/main...HEAD
+[Unreleased]: https://github.com/fantomc0der/roundup/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/fantomc0der/roundup/releases/tag/v0.1.0
