@@ -31,6 +31,7 @@ const state = {
   activeTeam: null as string | null,
   lastPingAt: 0,
   polling: false,
+  taskToolsRegistered: false,
 }
 
 type CliResult = { exitCode: number; json?: Record<string, unknown>; error?: { code: string; message: string; hint?: string }; stdout: string }
@@ -171,6 +172,43 @@ async function focusTeammate($: EngineInterface, name: string): Promise<void> {
   await $.process.run([bin, 'agent', 'focus', name], { timeoutMs: 5_000 })
 }
 
+const TASK_TOOLS = ['task_list', 'task_claim_next', 'task_complete'] as const
+
+// Wraps the task board for every session of the team as tools, so builders use it
+// the way they use the native task tools instead of remembering Bash incantations.
+async function registerTaskTools($: EngineInterface): Promise<void> {
+  if (state.taskToolsRegistered) return
+  state.taskToolsRegistered = true
+  await $.tool.register({
+    name: 'task_list',
+    description: 'List the roundup team task board: every task with id, title, owner, status, dependencies, files, and notes.',
+    inputSchema: { type: 'object', properties: {} },
+    isDeferred: false,
+  })
+  await $.tool.register({
+    name: 'task_claim_next',
+    description: 'Claim the next unblocked roundup task that is owned by you or unowned, and start working on it. Returns the task, or null when nothing is left for you.',
+    inputSchema: { type: 'object', properties: {} },
+    isDeferred: false,
+  })
+  await $.tool.register({
+    name: 'task_complete',
+    description: 'Mark one of your claimed roundup tasks done, with a note on what changed. Returns the task and the ids of tasks it unblocked.',
+    inputSchema: { type: 'object', properties: { id: { type: 'integer', description: 'the task id' }, notes: { type: 'string', description: 'what changed, for the lead' } }, required: ['id'] },
+    isDeferred: false,
+  })
+}
+
+const whoAmI = () => state.me?.name ?? 'lead'
+
+async function taskTool($: EngineInterface, args: string[]) {
+  const team = state.me?.team ?? state.activeTeam
+  if (!team) return { deny: 'no roundup team is active in this session' }
+  const r = await cli($, ['task', team, ...args])
+  if (!r.json) return { deny: r.error ? `${r.error.message}${r.error.hint ? ` (${r.error.hint})` : ''}` : 'roundup task failed' }
+  return { result: { content: [{ type: 'text', text: r.stdout }], isError: false } }
+}
+
 const stateColor = (s: string) => (s === 'working' ? 'yellow' : s === 'blocked' ? 'red' : s === 'gone' ? 'gray' : 'green')
 
 export const register: Register = (on, options) => {
@@ -196,6 +234,7 @@ export const register: Register = (on, options) => {
         void $.prompt.submit({ text: kickoffText(me), asUser: true })
         await stampKickoff($, me)
       }
+      await registerTaskTools($)
       return next(e)
     }
     state.ownSessionId = await $.session.id()
@@ -206,6 +245,7 @@ export const register: Register = (on, options) => {
       immediate: true,
     })
     state.activeTeam = await discoverTeam($)
+    if (state.activeTeam) await registerTaskTools($)
     $.clock.every(POLL_INTERVAL_MS, () => void refresh($).catch(() => undefined))
     if (state.activeTeam) void refresh($).catch(() => undefined)
     return next(e)
@@ -269,6 +309,7 @@ export const register: Register = (on, options) => {
       case 'use': {
         if (!rest[0]) return { text: 'roundup: use <team>' }
         state.activeTeam = rest[0]
+        await registerTaskTools($)
         await refresh($)
         return { text: `roundup: following team ${rest[0]}` }
       }
@@ -292,6 +333,7 @@ export const register: Register = (on, options) => {
         const r = await cli($, args)
         if (!r.json) return { text: `roundup init failed: ${r.error?.message ?? r.stdout}${r.error?.hint ? ` (${r.error.hint})` : ''}` }
         state.activeTeam = String(r.json.team)
+        await registerTaskTools($)
         void refresh($).catch(() => undefined)
         return { text: `roundup: team ${state.activeTeam} ready (${String(r.json.layout)} layout). Spawn teammates with roundup spawn.`, context: [r.stdout] }
       }
@@ -311,6 +353,14 @@ export const register: Register = (on, options) => {
         return { text: `roundup: unknown subcommand '${sub}'.\n${HELP}` }
     }
   })
+
+  on('tool.call', { tool: 'mcp__roundup__task_list' }, async $ => taskTool($, ['list'])).catch(() => ({ deny: 'roundup: task_list failed' }))
+  on('tool.call', { tool: 'mcp__roundup__task_claim_next' }, async $ => taskTool($, ['next', '--as', whoAmI()])).catch(() => ({ deny: 'roundup: task_claim_next failed' }))
+  on('tool.call', { tool: 'mcp__roundup__task_complete' }, async ($, e) => {
+    const { id, notes } = e as { id?: unknown; notes?: unknown }
+    if (id === undefined) return { deny: 'task_complete needs an id' }
+    return taskTool($, ['complete', String(id), '--as', whoAmI(), ...(typeof notes === 'string' && notes ? ['--notes', notes] : [])])
+  }).catch(() => ({ deny: 'roundup: task_complete failed' }))
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Text, Button } = $.ui.resolve(e)

@@ -31,6 +31,7 @@ function world(on: On, { manifest = MANIFEST as Record<string, unknown> | undefi
   const submitted: string[] = []
   const ran: string[][] = []
   const registered: string[] = []
+  const tools: string[] = []
   const status: Array<string | undefined> = []
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('fs.read', (_$, e) => {
@@ -62,6 +63,10 @@ function world(on: On, { manifest = MANIFEST as Record<string, unknown> | undefi
     registered.push(e.name)
     return { value: { command: e.name } }
   })
+  on('tool.register', (_$, e) => {
+    tools.push(e.name)
+    return { value: { tool: `mcp__roundup__${e.name}` } }
+  })
   on('ui.status', (_$, e) => {
     status.push(e.text)
     return { value: undefined }
@@ -72,7 +77,7 @@ function world(on: On, { manifest = MANIFEST as Record<string, unknown> | undefi
   on('turn.complete', (_$, e) => ({ text: e.answer }))
   on('session.receive', (_$, e) => ({ text: e.text }))
   on('prompt.compose', () => ({ sections: [{ id: 'core', text: 'base', scope: 'shared' as const }] }))
-  return { writes, sent, submitted, ran, registered, status }
+  return { writes, sent, submitted, ran, registered, tools, status }
 }
 
 const start = ($: Engine) => $.session.start({ cwd: 'C:\\proj', surface: 'terminal', isInteractive: true })
@@ -184,6 +189,23 @@ describe('teammate', () => {
     await start($)
     await $.turn.complete({ answer: 'done', durationMs: 10, isAborted: false, turnId: 't', reason: 'answer' })
     expect(w.sent[0]!.to).toBe('lead-1')
+  })
+
+  test('registers the task tools and serves them through the CLI as the teammate', async ($, on) => {
+    mock.env(on, TEAMMATE_ENV)
+    mock.clock(on)
+    const w = world(on, { process: argv => ({ exitCode: 0, stderr: '', stdout: JSON.stringify({ ok: true, argv }) }) })
+    await start($)
+    expect(w.tools).toEqual(['task_list', 'task_claim_next', 'task_complete'])
+    const claimed = await $.tool.call({ tool: 'mcp__roundup__task_claim_next' })
+    expect(claimed.deny).toBeUndefined()
+    const next = w.ran.find(a => a.includes('next'))!
+    expect(next.slice(2)).toEqual(['task', 'modal', 'next', '--as', 'modal-ux'])
+    await $.tool.call({ tool: 'mcp__roundup__task_complete', id: 3, notes: 'done it' })
+    const complete = w.ran.find(a => a.includes('complete'))!
+    expect(complete.slice(2)).toEqual(['task', 'modal', 'complete', '3', '--as', 'modal-ux', '--notes', 'done it'])
+    const bad = await $.tool.call({ tool: 'mcp__roundup__task_complete' })
+    expect(bad.deny).toContain('needs an id')
   })
 
   test('adds a teammate section to the system prompt', async ($, on) => {
