@@ -39,6 +39,8 @@ jobs:
         run: |
           claude plugin validate . --strict
           claude plugin validate .claude-plugin/plugin.json --strict
+          claude plugin validate skills --strict
+          claude plugin validate agents --strict
       - name: Unit tests
         run: npm test
       - name: Unit tests under Git Bash
