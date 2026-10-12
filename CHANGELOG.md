@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-12
+
 ### Fixed
 
 - A team started with `roundup init` from the lead's Bash tool, which is how the skill spells it, is linked to the lead's session: the mod adds `--lead-session-id` to the command (and to `roundup relead`) and follows the team once it exists, so `/corral pane` and `/corral status` work without `/corral use`. A lead inside a herdr pane also follows a team whose manifest records that pane as the one `init` ran in.
@@ -29,5 +31,6 @@ All notable changes to this project are documented here. The format follows [Kee
 - The lead command is `/corral`, because the engine refuses a command that shadows the plugin's own `/roundup:roundup` skill namespace.
 - The lead follows the open team under the teams root at session start; the discovery tested directory entries for a kind the engine never reports.
 
-[Unreleased]: https://github.com/fantomc0der/roundup/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/fantomc0der/roundup/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/fantomc0der/roundup/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/fantomc0der/roundup/releases/tag/v0.1.0
