@@ -1,6 +1,6 @@
 {
   "name": "roundup",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Round up a team of Claude Code sessions in herdr panes, let them argue it out, then build.",
   "author": {
     "name": "fantomc0der",
