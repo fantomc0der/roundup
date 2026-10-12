@@ -6,7 +6,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Fixed
 
-- A team started with `roundup init` from the lead's Bash tool, which is how the skill spells it, is linked to the lead's session: the mod adds `--lead-session-id` to the command and follows the team once it exists, so `/corral pane` and `/corral status` work without `/corral use`. A lead inside a herdr pane also follows a team whose manifest records that pane as the one `init` ran in.
+- A team started with `roundup init` from the lead's Bash tool, which is how the skill spells it, is linked to the lead's session: the mod adds `--lead-session-id` to the command (and to `roundup relead`) and follows the team once it exists, so `/corral pane` and `/corral status` work without `/corral use`. A lead inside a herdr pane also follows a team whose manifest records that pane as the one `init` ran in.
 - The corral pane stacks a teammate row when the pane is too narrow for the name, state, and buttons on one line, instead of cutting names down to the prefix every teammate shares, and shows the body of a teammate's last message rather than its cross-session envelope.
 
 ## [0.1.0] - 2026-10-11

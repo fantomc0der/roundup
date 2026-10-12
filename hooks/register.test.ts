@@ -286,6 +286,25 @@ describe('lead', () => {
     expect(w.bash).toEqual(['roundup status modal', 'roundup init modal --lead lead-1 --lead-session-id other'])
   })
 
+  test('a Bash roundup relead carries the lead session id and the re-led team is followed', async ($, on) => {
+    mock.env(on, { ROUNDUP_TEAMS_ROOT: 'C:\\teams' })
+    const clock = mock.clock(on)
+    // Two open teams, neither naming this session: nothing to follow until the relead names one.
+    const manifests = {
+      modal: { ...MANIFEST, leadSessionId: 'old-session' },
+      other: { ...MANIFEST, team: 'other', leadSessionId: 'someone-else' },
+    }
+    const w = world(on, { manifests, dirs: ['modal', 'other'], process: statusProcess })
+    await start($)
+    await clock.settle()
+    expect(w.ran.some(a => a.includes('status'))).toBe(false)
+    manifests.modal.leadSessionId = 'lead-session'
+    await $.tool.call({ tool: 'Bash', command: 'roundup relead modal --lead lead-2' })
+    expect(w.bash).toEqual(['roundup relead --lead-session-id lead-session modal --lead lead-2'])
+    await clock.settle()
+    expect(w.ran.some(a => a.includes('status') && a.includes('modal'))).toBe(true)
+  })
+
   test('a lead inside a herdr pane follows the team started from that pane', async ($, on) => {
     mock.env(on, { ROUNDUP_TEAMS_ROOT: 'C:\\teams', HERDR_PANE_ID: 'w1:p1' })
     const clock = mock.clock(on)
@@ -313,8 +332,9 @@ describe('lead', () => {
     expect(w.ran.some(a => a.includes('status') && a.includes('modal'))).toBe(true)
   })
 
-  test('the lead session id rides on roundup init only when it can', () => {
+  test('the lead session id rides on roundup init and relead only when it can', () => {
     expect(withLeadSessionId('roundup init modal --lead me', 'abc-123')).toBe('roundup init --lead-session-id abc-123 modal --lead me')
+    expect(withLeadSessionId('roundup relead modal --lead me-2', 'abc-123')).toBe('roundup relead --lead-session-id abc-123 modal --lead me-2')
     expect(withLeadSessionId('roundup init modal --lead-session-id x', 'abc')).toBe('roundup init modal --lead-session-id x')
     expect(withLeadSessionId('roundup init modal', null)).toBe('roundup init modal')
     expect(withLeadSessionId('roundup init modal', 'has space')).toBe('roundup init modal')

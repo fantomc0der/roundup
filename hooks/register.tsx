@@ -315,9 +315,10 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  // A lead that starts its team from Bash, the way the skill spells it, gets the same link as
-  // /corral init: the session id rides on the command so the manifest names this session, and
-  // the team is followed as soon as the command returns.
+  // A lead that starts or re-leads its team from Bash, the way the skill spells it, gets the same
+  // link as /corral init: the session id rides on the command so the manifest names this session,
+  // and the team is followed as soon as the command returns. Should the hook itself fail, the
+  // command runs as written; `next` replays its result when it was already called.
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     if (state.me || typeof e.command !== 'string' || !touchesTeamLead(e.command)) return next(e)
     const command = withLeadSessionId(e.command, state.ownSessionId)
@@ -329,7 +330,7 @@ export const register: Register = (on, options) => {
         .catch(() => undefined)
     }
     return out
-  })
+  }).catch(($, e, next) => next(e))
 
   on('tool.check', async ($, e, next) => roleVerdict(state.me, e.tool, e.input, state.advisorBash) ?? next(e)).catch(($, e, next) => roleVerdict(state.me, e.tool, e.input, state.advisorBash) ?? next(e))
 

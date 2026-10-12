@@ -129,7 +129,7 @@ Decided once at `session.start`:
 | :- | :- | :- |
 | `session.start` | status line; submit the brief as the user and stamp `kickoff: mod`; register task tools | `$.session.id()`; register `/corral`; follow the open team naming this session by session id or by the herdr pane it was started from, or the only open team; poll every 5 s |
 | `tool.check` | deny Edit, Write, NotebookEdit, and write-shaped Bash for advisors and reviewers, except under the team directory | pass through |
-| `tool.call Bash` | pass through | add `--lead-session-id` to a `roundup init`, then follow the team it created |
+| `tool.call Bash` | pass through | add `--lead-session-id` to a `roundup init` or `relead`, then follow the team it named |
 | `prompt.compose` | append a role reminder that survives compaction | pass through |
 | `turn.complete` | ping the lead with the answer's first line, at most every 20 s | pass through |
 | `session.receive` | log to `shared/log/<name>.jsonl` | track each teammate's last message for the pane |
