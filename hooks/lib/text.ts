@@ -15,11 +15,11 @@ export function tokenize(args: string): string[] {
   return out
 }
 
-const INIT_RE = /\broundup\s+init\b/g
+const INIT_RE = /\broundup\s+init\b/
 const RELEAD_RE = /\broundup\s+relead\b/
 
 // Whether a Bash command starts or re-leads a team, which is when the lead side should look for one to follow.
-export const touchesTeamLead = (command: string) => new RegExp(INIT_RE.source).test(command) || RELEAD_RE.test(command)
+export const touchesTeamLead = (command: string) => INIT_RE.test(command) || RELEAD_RE.test(command)
 
 // A Bash `roundup init` with this session's id added, so the manifest names the session the team belongs to
 // the same way `/corral init` would. Unchanged when the command already carries one, or when the id could
@@ -27,7 +27,7 @@ export const touchesTeamLead = (command: string) => new RegExp(INIT_RE.source).t
 export function withLeadSessionId(command: string, sessionId: string | null): string {
   if (!sessionId || !/^[A-Za-z0-9_.:-]+$/.test(sessionId)) return command
   if (command.includes('--lead-session-id')) return command
-  return command.replace(INIT_RE, m => `${m} --lead-session-id ${sessionId}`)
+  return command.replace(new RegExp(INIT_RE.source, 'g'), m => `${m} --lead-session-id ${sessionId}`)
 }
 
 // A peer delivery's text as the person would read it: the first line of the body, without the
