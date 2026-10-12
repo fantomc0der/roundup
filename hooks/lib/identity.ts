@@ -11,7 +11,7 @@ export type Identity = {
 }
 
 export type ManifestTeammate = { name: string; kind: string; paneId: string; brief?: string | null; kickoff?: string }
-export type Manifest = { team: string; lead: string; leadSessionId?: string | null; dir: string; status: string; teammates: ManifestTeammate[] }
+export type Manifest = { team: string; lead: string; leadSessionId?: string | null; dir: string; status: string; teammates: ManifestTeammate[]; herdr?: { callerPaneId?: string | null } }
 
 // The variables the mod reads; register.tsx spells each as a literal for the validator.
 export type TeammateEnv = {

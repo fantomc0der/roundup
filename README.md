@@ -57,9 +57,9 @@ The lead reads the code, writes a problem statement, briefs each teammate, runs 
 | Command | Does |
 | :- | :- |
 | `/corral status` | Live state of the active team |
-| `/corral pane` | A pane with every teammate's state, last message, focus and release buttons, and the task board |
+| `/corral pane` | A pane with every teammate's state, last message, focus and release buttons, and the task board, laid out for the pane's width |
 | `/corral init <team> --lead <name> ...` | Start a team with this session recorded as the lead |
-| `/corral use <team>` | Follow a team that was started from Bash |
+| `/corral use <team>` | Follow a team this session did not start (a `roundup init` run from this session's Bash tool is followed on its own) |
 | `/corral task ...` | The task board |
 | `/corral close` | Release everyone and close what the team created |
 

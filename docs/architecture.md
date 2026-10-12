@@ -127,13 +127,14 @@ Decided once at `session.start`:
 
 | | Teammate (`ROUNDUP_*` present, or pane found in a manifest) | Lead (everything else) |
 | :- | :- | :- |
-| `session.start` | status line; submit the brief as the user and stamp `kickoff: mod`; register task tools | `$.session.id()`; register `/corral`; follow the open team naming this session, or the only open team; poll every 5 s |
+| `session.start` | status line; submit the brief as the user and stamp `kickoff: mod`; register task tools | `$.session.id()`; register `/corral`; follow the open team naming this session by session id or by the herdr pane it was started from, or the only open team; poll every 5 s |
 | `tool.check` | deny Edit, Write, NotebookEdit, and write-shaped Bash for advisors and reviewers, except under the team directory | pass through |
+| `tool.call Bash` | pass through | add `--lead-session-id` to a `roundup init`, then follow the team it created |
 | `prompt.compose` | append a role reminder that survives compaction | pass through |
 | `turn.complete` | ping the lead with the answer's first line, at most every 20 s | pass through |
 | `session.receive` | log to `shared/log/<name>.jsonl` | track each teammate's last message for the pane |
 | `command.run /corral` | n/a | status, pane, use, init, task, close |
-| `ui.render Pane` | n/a | teammates with state, last message, focus and release buttons, task summary |
+| `ui.render Pane` | n/a | teammates with state, last message, focus and release buttons, task summary; columns sized to the pane, stacked rows when it is narrow |
 | `tool.call mcp__roundup__task_*` | list, claim next, complete as this teammate | the same as the lead |
 
 Every hook is a no-op outside a team, so the plugin is inert in ordinary sessions.
