@@ -6,7 +6,7 @@ import { identityFrom, kickoffText, manifestPath, needsKickoff, parseManifest, w
 import type { Identity, Manifest } from './lib/identity'
 import { roleVerdict } from './lib/guard'
 import type { AdvisorBash } from './lib/guard'
-import { firstLine, fromName, tokenize } from './lib/text'
+import { firstLine, fromName, messageBody, tokenize, touchesTeamLead, withLeadSessionId } from './lib/text'
 
 const PANE = 'roundup'
 const COMMAND = 'corral'
@@ -29,7 +29,10 @@ const state = {
   me: null as Identity | null,
   advisorBash: 'readonly-heuristic' as AdvisorBash,
   ownSessionId: null as string | null,
+  ownPaneId: null as string | null,
   activeTeam: null as string | null,
+  // A Bash `roundup init` was seen and no team is followed yet, so the poll keeps looking for it.
+  expectTeam: false,
   lastPingAt: 0,
   polling: false,
   taskToolsRegistered: false,
@@ -65,7 +68,8 @@ async function teamsRoot($: EngineInterface): Promise<string> {
   return `${home}/.claude/roundup`
 }
 
-// The lead follows the open team whose manifest names this session, or the only open team.
+// The lead follows the open team whose manifest names this session, by session id or by the
+// herdr pane `roundup init` ran in, or else the only open team.
 async function discoverTeam($: EngineInterface): Promise<string | null> {
   const root = await teamsRoot($)
   let entries: Array<{ name: string; kind: string }> = []
@@ -74,15 +78,26 @@ async function discoverTeam($: EngineInterface): Promise<string | null> {
   } catch {
     return null
   }
-  const open: Array<{ team: string; leadSessionId?: string | null }> = []
+  const open: Array<{ team: string; leadSessionId?: string | null; callerPaneId?: string | null }> = []
   for (const entry of entries) {
     if (entry.kind !== 'dir') continue
     const manifest = await readManifest($, `${root}/${entry.name}`)
-    if (manifest?.status === 'open') open.push({ team: manifest.team, leadSessionId: manifest.leadSessionId })
+    if (manifest?.status === 'open') open.push({ team: manifest.team, leadSessionId: manifest.leadSessionId, callerPaneId: manifest.herdr?.callerPaneId })
   }
-  const mine = open.find(t => t.leadSessionId && t.leadSessionId === state.ownSessionId)
+  const mine = open.find(t => t.leadSessionId && t.leadSessionId === state.ownSessionId) ?? open.find(t => t.callerPaneId && t.callerPaneId === state.ownPaneId)
   if (mine) return mine.team
   return open.length === 1 ? open[0]!.team : null
+}
+
+// Picks up a team started outside /corral, so the lead needs no /corral use after a Bash `roundup init`.
+async function follow($: EngineInterface): Promise<string | null> {
+  if (state.activeTeam) return state.activeTeam
+  state.activeTeam = await discoverTeam($)
+  if (state.activeTeam) {
+    state.expectTeam = false
+    await registerTaskTools($)
+  }
+  return state.activeTeam
 }
 
 async function taskSummary($: EngineInterface, dir: string): Promise<TaskSummary | undefined> {
@@ -93,6 +108,11 @@ async function taskSummary($: EngineInterface, dir: string): Promise<TaskSummary
   } catch {
     return undefined
   }
+}
+
+async function poll($: EngineInterface): Promise<void> {
+  if (!state.activeTeam && state.expectTeam) await follow($)
+  await refresh($)
 }
 
 async function refresh($: EngineInterface): Promise<void> {
@@ -214,6 +234,8 @@ const stateColor = (s: string) => (s === 'working' ? 'yellow' : s === 'blocked' 
 // Cells of a teammate row that never shrink: the state dot, `[ focus ] [ release ]`, and the
 // gaps around them. The kind column needs its own width plus one gap on top of this.
 const ROW_CHROME = 26
+const BUTTON_CELLS = 21
+const STACK_INDENT = 2
 const BAR_CELLS = 12
 const PANE_COLUMNS = 72
 
@@ -222,16 +244,19 @@ const ago = (now: number, at: number) => {
   return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m` : `${Math.floor(s / 3600)}h`
 }
 
-// Column widths for the teammate rows. Names and kinds take what the longest needs; the kind
-// column is dropped first when the body is too narrow, then names truncate.
+// Column widths for the teammate rows. Names and kinds take what the longest needs. When the body
+// is too narrow for a full row the kind column goes first; when the name still does not fit, the
+// row stacks: name and state on one line, kind and the buttons under it. Teammates share the team
+// slug as a prefix, so a name cut short would read the same for all of them.
 function rowColumns(teammates: TeammateRow[], bodyColumns: number) {
   const longest = (pick: (t: TeammateRow) => string) => teammates.reduce((n, t) => Math.max(n, pick(t).length), 0)
   const kind = longest(t => t.kind)
   const state = Math.max(7, longest(t => t.state))
   const wanted = Math.min(24, Math.max(6, longest(t => t.name)))
-  const showKind = ROW_CHROME + wanted + kind + 1 + state <= bodyColumns
-  const name = Math.min(wanted, Math.max(6, bodyColumns - ROW_CHROME - state - (showKind ? kind + 1 : 0)))
-  return { name, kind, state, showKind }
+  if (ROW_CHROME + wanted + kind + 1 + state <= bodyColumns) return { name: wanted, kind, state, showKind: true, stacked: false }
+  if (ROW_CHROME + wanted + state <= bodyColumns) return { name: wanted, kind, state, showKind: false, stacked: false }
+  const name = Math.min(wanted, Math.max(6, bodyColumns - 3 - state))
+  return { name, kind, state, showKind: STACK_INDENT + kind + 1 + BUTTON_CELLS <= bodyColumns, stacked: true }
 }
 
 // The line under a teammate's name: what needs the person's attention first, else the last message.
@@ -270,6 +295,7 @@ export const register: Register = (on, options) => {
       return next(e)
     }
     state.ownSessionId = await $.session.id()
+    state.ownPaneId = (await $.env.get('HERDR_PANE_ID')) ?? null
     // The plugin's skill owns /roundup:roundup, and the engine refuses a command that
     // shadows the plugin's own namespace, hence a second word for the lead's command.
     try {
@@ -284,10 +310,27 @@ export const register: Register = (on, options) => {
     }
     state.activeTeam = await discoverTeam($)
     if (state.activeTeam) await registerTaskTools($)
-    $.clock.every(POLL_INTERVAL_MS, () => void refresh($).catch(() => undefined))
+    $.clock.every(POLL_INTERVAL_MS, () => void poll($).catch(() => undefined))
     if (state.activeTeam) void refresh($).catch(() => undefined)
     return next(e)
   })
+
+  // A lead that starts or re-leads its team from Bash, the way the skill spells it, gets the same
+  // link as /corral init: the session id rides on the command so the manifest names this session,
+  // and the team is followed as soon as the command returns. Should the hook itself fail, the
+  // command runs as written; `next` replays its result when it was already called.
+  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    if (state.me || typeof e.command !== 'string' || !touchesTeamLead(e.command)) return next(e)
+    const command = withLeadSessionId(e.command, state.ownSessionId)
+    const out = await next(command === e.command ? e : { ...e, command })
+    if (!out.deny && !state.activeTeam) {
+      state.expectTeam = true
+      void follow($)
+        .then(team => (team ? refresh($) : undefined))
+        .catch(() => undefined)
+    }
+    return out
+  }).catch(($, e, next) => next(e))
 
   on('tool.check', async ($, e, next) => roleVerdict(state.me, e.tool, e.input, state.advisorBash) ?? next(e)).catch(($, e, next) => roleVerdict(state.me, e.tool, e.input, state.advisorBash) ?? next(e))
 
@@ -326,12 +369,12 @@ export const register: Register = (on, options) => {
     const me = state.me
     if (me) {
       const at = await $.clock.now()
-      void appendLog($, `${me.dir}/shared/log/${me.name}.jsonl`, { at, from: sender ?? e.origin.kind, text: firstLine(e.text, 300) }).catch(() => undefined)
+      void appendLog($, `${me.dir}/shared/log/${me.name}.jsonl`, { at, from: sender ?? e.origin.kind, text: messageBody(e.text, 300) }).catch(() => undefined)
     } else if (sender) {
       const at = await $.clock.now()
       await update($, teamView, v =>
         v && v.teammates.some(t => t.name === sender)
-          ? { ...v, teammates: v.teammates.map(t => (t.name === sender ? { ...t, lastMessage: firstLine(e.text, 120), lastMessageAt: at } : t)) }
+          ? { ...v, teammates: v.teammates.map(t => (t.name === sender ? { ...t, lastMessage: messageBody(e.text, 120), lastMessageAt: at } : t)) }
           : v,
       )
     }
@@ -354,12 +397,13 @@ export const register: Register = (on, options) => {
       case 'pane': {
         // Wide enough for the full row: dot, a long name, kind, state, and both buttons.
         const opened = await $.ui.open({ id: PANE, title: 'roundup', focus: true, closeOnEscape: true, columns: PANE_COLUMNS })
-        if (state.activeTeam) void refresh($).catch(() => undefined)
+        if (await follow($)) void refresh($).catch(() => undefined)
         return { text: opened.isPlaced ? 'roundup pane opened.' : `roundup pane is waiting: ${opened.reason}` }
       }
       case 'status': {
-        if (!state.activeTeam) return { text: 'roundup: no active team. /corral use <team> or /corral init ...' }
-        const r = await cli($, ['status', state.activeTeam])
+        const team = await follow($)
+        if (!team) return { text: 'roundup: no active team. /corral use <team> or /corral init ...' }
+        const r = await cli($, ['status', team])
         if (!r.json) return { text: `roundup status failed: ${r.error?.message ?? r.stdout}` }
         const view = r.json as unknown as TeamView
         const lines = view.teammates.map(t => `  ${t.name.padEnd(20)} ${t.kind.padEnd(9)} ${t.state}`)
@@ -466,6 +510,12 @@ export const register: Register = (on, options) => {
         )}
         {view.teammates.map(t => {
           const note = teammateNote(t, now)
+          const buttons = (
+            <Box flexDirection="row" gap={1} flexShrink={0}>
+              <Button key={`focus:${t.name}`} label="focus" dimColor={t.state === 'gone'} hover={{ bold: true }} onPress={() => void focusTeammate($, t.name).catch(() => undefined)} />
+              <Button key={`release:${t.name}`} label="release" hover={{ bold: true }} onPress={() => void releaseTeammate($, view.team, t.name).catch(() => undefined)} />
+            </Box>
+          )
           return (
             <Box key={t.name} flexDirection="column" marginTop={1}>
               <Box flexDirection="row" justifyContent="space-between" gap={2}>
@@ -476,7 +526,7 @@ export const register: Register = (on, options) => {
                       {t.name}
                     </Text>
                   </Box>
-                  {cols.showKind && (
+                  {cols.showKind && !cols.stacked && (
                     <Box width={cols.kind} flexShrink={0}>
                       <Text dimColor>{t.kind}</Text>
                     </Box>
@@ -485,11 +535,18 @@ export const register: Register = (on, options) => {
                     <Text color={stateColor(t.state)}>{t.state}</Text>
                   </Box>
                 </Box>
-                <Box flexDirection="row" gap={1} flexShrink={0}>
-                  <Button key={`focus:${t.name}`} label="focus" dimColor={t.state === 'gone'} hover={{ bold: true }} onPress={() => void focusTeammate($, t.name).catch(() => undefined)} />
-                  <Button key={`release:${t.name}`} label="release" hover={{ bold: true }} onPress={() => void releaseTeammate($, view.team, t.name).catch(() => undefined)} />
-                </Box>
+                {!cols.stacked && buttons}
               </Box>
+              {cols.stacked && (
+                <Box flexDirection="row" paddingLeft={STACK_INDENT} gap={1}>
+                  {cols.showKind && (
+                    <Box width={cols.kind} flexShrink={0}>
+                      <Text dimColor>{t.kind}</Text>
+                    </Box>
+                  )}
+                  {buttons}
+                </Box>
+              )}
               <Box flexDirection="row" paddingLeft={2} gap={1}>
                 <Text dimColor>⎿</Text>
                 <Text color={note.color} dimColor={note.dim} wrap="truncate-end" hover={{ dimColor: false }}>
@@ -500,7 +557,7 @@ export const register: Register = (on, options) => {
           )
         })}
         {tasks && (
-          <Box flexDirection="row" gap={1} marginTop={1}>
+          <Box flexDirection="row" flexWrap="wrap" gap={1} marginTop={1}>
             <Text dimColor>tasks</Text>
             {tasks.total === 0 && <Text dimColor>none on the board yet</Text>}
             {tasks.total > 0 && (

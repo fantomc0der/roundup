@@ -322,7 +322,7 @@ Target size: SKILL.md under 200 lines; the references are loaded on demand.
 `hooks/register.ts`, loaded in every session that has the plugin enabled. Two personalities, decided at `session.start`:
 
 - **Teammate mode** when `ROUNDUP_TEAM` and `ROUNDUP_NAME` are set in the environment (`$.env.get`).
-- **Lead mode** when the session is not a teammate. Lead hooks stay inert until `/corral` is used or a manifest in the teams root names this session as lead (by `ROUNDUP_LEAD_SESSION_ID` equal to `$.session.id()`).
+- **Lead mode** when the session is not a teammate. Lead hooks stay inert until `/corral` is used, a `roundup init` runs through this session's Bash tool, or a manifest in the teams root names this session as lead (by `leadSessionId` equal to `$.session.id()`, or by `herdr.callerPaneId` equal to this session's `HERDR_PANE_ID`).
 
 ```mermaid
 stateDiagram-v2
@@ -334,7 +334,7 @@ stateDiagram-v2
   Working --> Working: turn.complete pings lead
   Working --> [*]: session.end
   Lead --> Idle
-  Idle --> Active: /corral init or manifest names this session
+  Idle --> Active: /corral init, Bash roundup init, or manifest names this session
   Active --> Active: session.receive logs team messages, pane redraws
   Active --> Idle: /corral close
 ```
@@ -357,8 +357,9 @@ stateDiagram-v2
 | `command.run` `/corral status` | Run `roundup status <team>` through `$.process.run` and return its summary as `{ text }`. |
 | `command.run` `/corral pane` | `$.ui.open({ id: 'roundup', title: 'roundup', focus: true, closeOnEscape: true })`. |
 | `command.run` `/corral close` | Run `roundup close <team>` and return the result. |
-| `command.run` `/corral init <args>` | Run `roundup init` with `--lead-session-id $.session.id()` appended, so teammates can ping this session. The skill prefers this form when the mod is present. |
-| `ui.render` `Pane` | Draw: a header with team name, layout, retention, status, and how long ago the last poll ran; two lines per teammate, the first a state dot, name, kind, herdr state (`idle`/`working`/`blocked`/`gone`) in fixed-width columns sized from `e.props.bodyColumns` with the buttons `focus` (herdr agent focus) and `release` right-aligned, the second a note: `waiting on a prompt in its pane` when blocked, `kickoff stalled` when spawn could not type the brief, `session ended` when gone, else the age and first line of the last message. The kind column is dropped first when the body is too narrow, then names truncate. Below: the task board as a bar and counts when `tasks.json` exists. Distinct copy for no team, no teammates, a closed team, and a failed poll. State comes from a `$.clock.every(5000)` poll of `roundup status` stored in `$.state`. |
+| `command.run` `/corral init <args>` | Run `roundup init` with `--lead-session-id $.session.id()` appended, so teammates can ping this session. |
+| `tool.call` `Bash` | When the command runs `roundup init` or `roundup relead` without `--lead-session-id`, rewrite it to carry `$.session.id()`, so the Bash form the skill uses links the team to this session the same way `/corral init` does, and a lead that resumed under a new session id points teammates spawned after the relead at the live session. Once the command returns, look for the team under the teams root and follow it; the poll keeps looking until it appears. `/corral pane` and `/corral status` look too, so a team started any other way is followed without `/corral use` as long as its manifest names this session or it is the only open team. |
+| `ui.render` `Pane` | Draw: a header with team name, layout, retention, status, and how long ago the last poll ran; two lines per teammate, the first a state dot, name, kind, herdr state (`idle`/`working`/`blocked`/`gone`) in fixed-width columns sized from `e.props.bodyColumns` with the buttons `focus` (herdr agent focus) and `release` right-aligned, the second a note: `waiting on a prompt in its pane` when blocked, `kickoff stalled` when spawn could not type the brief, `session ended` when gone, else the age and first line of the last message. The kind column is dropped first when the body is too narrow; when the name still does not fit, the row stacks, with the kind and the buttons on a second line under the name, because teammates share the team slug as a prefix and a name cut short would read the same for all of them. The last message is shown without its cross-session envelope. Below: the task board as a bar and counts when `tasks.json` exists. Distinct copy for no team, no teammates, a closed team, and a failed poll. State comes from a `$.clock.every(5000)` poll of `roundup status` stored in `$.state`. |
 | `session.receive` | When `from-name` is a teammate of the active team, append to the lead's message log and update the teammate's `lastMessage` in `$.state`. Never consume. |
 | `ui.render` `Spinner` | While a team is active and the lead is waiting on teammates, suffix the spinner with `· waiting on modal-ux, modal-pm`. |
 

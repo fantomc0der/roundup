@@ -14,3 +14,22 @@ export function tokenize(args: string): string[] {
   while ((m = re.exec(args)) !== null) out.push(m[1] ?? m[2] ?? m[3] ?? '')
   return out
 }
+
+const LEAD_RE = /\broundup\s+(?:init|relead)\b/
+
+// Whether a Bash command starts or re-leads a team, which is when the lead side should look for one to follow.
+export const touchesTeamLead = (command: string) => LEAD_RE.test(command)
+
+// A Bash `roundup init` or `roundup relead` with this session's id added, so the manifest names the session
+// the team belongs to the same way `/corral init` would; teammates spawned afterwards ping that id. Unchanged
+// when the command already carries one, or when the id could not be spelled bare on a shell command line.
+export function withLeadSessionId(command: string, sessionId: string | null): string {
+  if (!sessionId || !/^[A-Za-z0-9_.:-]+$/.test(sessionId)) return command
+  if (command.includes('--lead-session-id')) return command
+  return command.replace(new RegExp(LEAD_RE.source, 'g'), m => `${m} --lead-session-id ${sessionId}`)
+}
+
+// A peer delivery's text as the person would read it: the first line of the body, without the
+// cross-session envelope the engine wraps around it.
+export const messageBody = (text: string, max = 200) =>
+  firstLine(text.replace(/<cross-session-message\b[^>]*>/g, '').replace(/<\/cross-session-message>/g, ''), max)

@@ -44,7 +44,7 @@ roundup init <team> --lead <your session name> --size <N> --default-layout ${use
 roundup spawn <team> <team>-<role> --role "<one-line role>" --kind advisor|builder|reviewer --brief <path> --auto-trust [--agent roundup:<def>] [--model <alias>] [--permission-mode <mode>]
 ```
 
-If the `/corral` command exists in this session (the plugin's mod is loaded), run `/corral init <team> --lead <name> ...` instead of the Bash form: it adds your session id so teammates can ping you when their turns end.
+When the plugin's mod is loaded (the `/corral` command exists), the Bash form is enough: the mod adds your session id to `roundup init` so the manifest names this session as the lead, teammates can ping you when their turns end, and `/corral pane` and `/corral status` follow the team on their own. `/corral init <team> --lead <name> ...` does the same from the prompt.
 
 `init` creates the team directory (`~/.claude/roundup/<team>/` with `briefs/`, `shared/`, `manifest.json`) and the herdr container for the layout. `spawn` creates a pane carrying the team's environment, starts `claude --name <name>` there with a short system prompt (identity, role, brief path, your name), waits until the input box is genuinely ready, and kicks off. Its JSON ends with `kickoff: working` (typed and confirmed), `mod` (the mod submitted the brief), `stalled` (read the pane before resending), or `skipped` (no brief). Spawn teammates one after another, not in parallel: each split is relative to the panes that exist.
 
