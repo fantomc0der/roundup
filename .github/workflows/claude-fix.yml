@@ -43,7 +43,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm install -g @anthropic-ai/claude-code@2.1.296
-      - uses: anthropics/claude-code-action@v1.0.248
+      - uses: anthropics/claude-code-action@v1.0.252
         env:
           # Headless runs end when the main conversation stops, so work handed
           # to background subagents or commands is never reported back. See
